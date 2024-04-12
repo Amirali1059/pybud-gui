@@ -1,10 +1,9 @@
-import pybud
 import pybud.ansi as ansi
 from pybud.drawer import ColoredString as CStr
 from pybud.ansi import ColorType
 from pybud.gui.dialog import AutoDialog
 from pybud.deftypes import Size, Point
-from pybud.gui.widgets import WidgetInput, WidgetLabel, WidgetOptions
+from pybud.gui.widgets import WidgetLabel, WidgetOptions
 
 
 def main_dialog(WIDTH = 70):
@@ -59,17 +58,8 @@ def main_dialog(WIDTH = 70):
 if __name__ == "__main__":
     ansi.InitAnsi()
 
-    DEBUG = False
-
-    if DEBUG:
-        f = open("output.ansi", "w", encoding="utf-8")
-        ansi.write = lambda x: f.write(x)
-        ansi.writeln = lambda x: f.write(x + "\n")
-        ansi.flush = lambda: f.flush()
-
     mydialog = main_dialog()
     try:
-        # mydialog.show()
         text = mydialog.show()
 
         print(f"result: \"{text}\"")

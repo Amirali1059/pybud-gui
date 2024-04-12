@@ -2,7 +2,7 @@ import pybud.ansi as ansi
 from pybud.ansi import ColorType
 from pybud.deftypes import Point, Size
 from pybud.drawer import ColoredString as CStr
-from pybud.gui.dialog import AutoDialog
+from pybud.gui.dialog import AutoDialog, DialogBase
 from pybud.gui.widgets import WidgetInput, WidgetLabel, WidgetOptions
 
 
@@ -38,22 +38,22 @@ def input_dialog(WIDTH=76):
         pos=Point(WIDTH//2 + 2, 6),
     ))
 
-    def briliant_option(self):
+    def briliant_option(self: DialogBase):
         ansi.write("Briliant!        \r")
         ansi.flush()
         return "Briliant!"
 
-    def verycool_option(self):
+    def verycool_option(self: DialogBase):
         ansi.write("Very Cool!        \r")
         ansi.flush()
         return "Very Cool!"
 
-    def nice_option(self):
+    def nice_option(self: DialogBase):
         ansi.write("Nice!             \r")
         ansi.flush()
         return "Nice!"
 
-    def awesome_option(self):
+    def awesome_option(self: DialogBase):
         ansi.write("Awesome!          \r")
         ansi.flush()
         return "Awesome!"
