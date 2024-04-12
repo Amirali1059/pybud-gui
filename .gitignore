@@ -1,0 +1,10 @@
+# ignore all __pycache__ directories
+**/__pycache__
+# ignore all .cache directories
+**/.cache
+# ignore all .vscode directories
+**/.vscode
+# ignore all *.egg-info directories
+**/*.egg-info
+# ignore dist directory
+dist

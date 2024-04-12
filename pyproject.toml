@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "pybud-gui"
+version = "0.9.6"
+dependencies = [
+  "readchar==4.0.5",
+]
+requires-python = ">= 3.10"
+authors = [
+  {name = "Amirali Mollaei", email = "aam.products.mail@gmail.com"},
+]
+description = "Create beautiful console GUIs in python, using Widgets, Dialogs, and more!"
+license = {text = "BSD 4-clause License"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+readme = "README.md"
