@@ -1,9 +1,9 @@
 
 import types
 
-from pybud.drawer import ColoredString as CStr
-from pybud.drawer import ColoredStringList as CStrList
-from pybud.drawer import ColorType, Drawer
+from pybud.drawing import ColoredString as CStr
+from pybud.drawing import ColoredStringList as CStrList
+from pybud.drawing import ColorType, Drawer
 from readchar import key as Key
 
 from ..deftypes import Point, Size, DEFAULT_BACKGROUND_COLOR

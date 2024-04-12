@@ -6,5 +6,10 @@
 **/.vscode
 # ignore all *.egg-info directories
 **/*.egg-info
+# ignore all test python files
+**/test-*.py
+**/test*.py
+**/*test.py
+**/*-test.py
 # ignore dist directory
 dist

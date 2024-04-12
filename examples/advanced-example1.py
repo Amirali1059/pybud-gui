@@ -1,5 +1,5 @@
 import pybud.ansi as ansi
-from pybud.drawer import ColoredString as CStr
+from pybud.drawing import ColoredString as CStr
 from pybud.ansi import ColorType
 from pybud.gui.dialog import AutoDialog
 from pybud.deftypes import Size, Point

@@ -11,8 +11,8 @@ except ModuleNotFoundError:
     exit(1)
 
 import pybud.ansi as ansi
-from pybud.drawer import ColoredString as CStr
-from pybud.drawer import ColorType, Drawer
+from pybud.drawing import ColoredString as CStr
+from pybud.drawing import ColorType, Drawer
 from .widgets import Widget
 from ..deftypes import DEFAULT_BACKGROUND_COLOR
 
@@ -95,7 +95,7 @@ class Drawable():
 
 
 class DialogBase(Drawable):
-    def __init__(self, width: int, ctype: ColorType = None, background_color: ColorType = None):
+    def __init__(self, width: int, ctype: ColorType = None, background_color: tuple[int, int, int] = None):
         super().__init__(ctype)
         self.width = width
         self.background_color = background_color
@@ -131,18 +131,26 @@ class DialogBase(Drawable):
 
     def get_active_widget(self, return_i: bool = False):
         i = 0
+        w = None
+
+        if self.totw == 0:
+            if return_i:
+                return w, i
+            else:
+                return w
+        
         for w in self.widgets:
             if not w.selectable:
                 continue
             if w.is_disabled:
                 i += 1
                 continue
-            if return_i:
-                return w, i
-            else:
-                return w
+            break
 
-        return None, 0
+        if return_i:
+            return w, i
+        else:
+            return w
 
     def set_active_widget(self, __i: int):
         i = 0
@@ -210,7 +218,7 @@ class DialogBase(Drawable):
 
 
 class AutoDialog(DialogBase):
-    def __init__(self, width: int, ctype: ColorType = None, background_color: ColorType = None, mode: str = "v"):
+    def __init__(self, width: int, ctype: ColorType = None, background_color: tuple[int, int, int] = None, mode: str = "v"):
         super().__init__(width, ctype)
         assert mode in ["v", "iv", "h", "ih"], f"Unknown mode \"{mode}\"!"
         self.mode = mode.lower()
@@ -222,35 +230,34 @@ class AutoDialog(DialogBase):
             self.draw()
             return
 
-        w, i = self.get_active_widget(True)
-        if w is None:
-            return
-
-        av = i
-        if self.mode == "v":
-            if key == Key.UP:
-                av = (i - 1) % self.totw 
-            elif key == Key.DOWN:
-                av = (i + 1) % self.totw
-        elif self.mode == "iv":
-            if key == Key.DOWN:
-                av = (i + 1) % self.totw
-            elif key == Key.UP:
-                av = (i + 1) % self.totw
-        elif self.mode == "h":
-            if key == Key.LEFT:
-                av = (i - 1) % self.totw
-            elif key == Key.RIGHT:
-                av = (i + 1) % self.totw
-        elif self.mode == "ih":
-            if key == Key.RIGHT:
-                av = (i + 1) % self.totw
-            elif key == Key.LEFT:
-                av = (i - 1) % self.totw
-        else:
-            raise ValueError(f"Unknown mode \"{self.mode}\"!")
+        if self.totw != 0:
+            w, i = self.get_active_widget(True)
+            av = i
+            if self.mode == "v":
+                if key == Key.UP:
+                    av = (i - 1) % self.totw 
+                elif key == Key.DOWN:
+                    av = (i + 1) % self.totw
+            elif self.mode == "iv":
+                if key == Key.DOWN:
+                    av = (i + 1) % self.totw
+                elif key == Key.UP:
+                    av = (i + 1) % self.totw
+            elif self.mode == "h":
+                if key == Key.LEFT:
+                    av = (i - 1) % self.totw
+                elif key == Key.RIGHT:
+                    av = (i + 1) % self.totw
+            elif self.mode == "ih":
+                if key == Key.RIGHT:
+                    av = (i + 1) % self.totw
+                elif key == Key.LEFT:
+                    av = (i - 1) % self.totw
+            else:
+                raise ValueError(f"Unknown mode \"{self.mode}\"!")
+            self.set_active_widget(av)
         
-        self.set_active_widget(av)
+        # draw after each update
         self.draw()
 
     def render(self):

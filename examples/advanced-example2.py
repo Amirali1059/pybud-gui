@@ -1,7 +1,7 @@
 import pybud.ansi as ansi
 from pybud.ansi import ColorType
 from pybud.deftypes import Point, Size
-from pybud.drawer import ColoredString as CStr
+from pybud.drawing import ColoredString as CStr
 from pybud.gui.dialog import AutoDialog, DialogBase
 from pybud.gui.widgets import WidgetInput, WidgetLabel, WidgetOptions
 
