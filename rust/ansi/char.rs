@@ -34,7 +34,7 @@ impl AnsiChar {
                 Some(fore) => {Some(AnsiColor(fore.0, fore.1, fore.2))},
                 None => {None}
             },
-            graphics: AnsiGraphics {modes: Vec::new()},
+            graphics: AnsiGraphics::new(),
         }
     }
 
@@ -42,11 +42,11 @@ impl AnsiChar {
         let mut pre = String::new();
         pre.push_str(self.graphics.to_string(false).as_str());
         match &self.back_color {
-            Some(back) => {pre += back.to_string(mode, &ColorGround::Back).as_str()},
+            Some(back) => {pre += back.to_string(mode, &ColorGround::BACK).as_str()},
             None => {}
         };
         match &self.fore_color {
-            Some(fore) => {pre += fore.to_string(mode, &ColorGround::Fore).as_str()},
+            Some(fore) => {pre += fore.to_string(mode, &ColorGround::FORE).as_str()},
             None => {}
         };
         
@@ -58,13 +58,12 @@ impl AnsiChar {
 
     // python __str__ magic function
     pub fn __str__(&self) -> String{
-        self.to_string(&ColorMode::TrueColor)
+        self.to_string(&ColorMode::TRUECOLOR)
     }
 
-    pub fn setchar(&mut self, c: char) {
+    pub fn set(&mut self, c: char) {
         self.char = c;
     }
-
 
     pub fn as_ansistring(&self) -> AnsiString {
         AnsiString {
@@ -72,8 +71,8 @@ impl AnsiChar {
         }
     }
 
-    // python operation add
-    pub fn __add__(&mut self, other: Self) -> AnsiString{
+    // python __add__ magic function
+    pub fn __add__(&self, other: Self) -> AnsiString{
         self.clone().add(other)
     }
 }

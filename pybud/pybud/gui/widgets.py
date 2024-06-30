@@ -19,7 +19,7 @@ def default(d: dict, k:str, default):
 class WidgetBase():
     def __init__(self, size: list[int, int] = None, pos: list[int, int] = [0, 0], **kwargs):
         # set variabled
-        self.ctype = default(kwargs, "ctype", ColorMode.Limited)
+        self.ctype = default(kwargs, "ctype", ColorMode.LIMITED)
         self.size = [6, 60] if size is None else size
         self.pos = [0, 0] if pos is None else pos
         # defaults
@@ -359,7 +359,7 @@ class WidgetInput(Widget):
         if not self.is_disabled and self.show_pointer or inp_[pointer-view] != " ":
             #pointer_str = AStr(
             #    inp_[pointer-view], back = (220, 220, 220), fore = (20, 20, 20))
-            pointer_str.add_graphics(AnsiGraphicMode.Reverse)
+            pointer_str.add_graphics(AnsiGraphicMode.REVERSE)
         #else:
         #    pointer_str = AStr(inp_[pointer-view])
         
@@ -380,7 +380,7 @@ class WidgetInput(Widget):
         fstr = fstr + input_plus_pointer + AStr(" " * (max_input_len - len(input_plus_pointer)))
         fstr = fstr + (forward_exists if view+max_input_len-1 < len(inp) else AStr(" "))
 
-        fstr.add_graphics(AnsiGraphicMode.Underline)
+        fstr.add_graphics(AnsiGraphicMode.UNDERLINE)
         return title + fstr
 
     def render(self):

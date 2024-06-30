@@ -1,5 +1,6 @@
 #![allow(unused)]
 use pyo3::prelude::*;
+use bitflags::{bitflags, Flags};
 
 pub mod char;
 pub mod string;
@@ -31,25 +32,19 @@ fn calc_legacy_colorbit(c: u8) -> u8{
     }
 }
 
-#[pymethods]
 impl AnsiColor {
-    #[new]
-    fn new(r: u8, g: u8, b: u8) -> Self{
-        AnsiColor {0: r, 1: g, 2:b}
-    }
-
     fn truecolor_render(&self, ground: &ColorGround) -> String {
         let cmd = match ground {
-            ColorGround::Back => "48",
-            ColorGround::Fore => "38",
+            ColorGround::BACK => "48",
+            ColorGround::FORE => "38",
         };
         format!("\x1b[{};2;{};{};{}m", cmd, self.0, self.1, self.2)
     }
 
     fn limited_render(&self, ground: &ColorGround) -> String {
         let cmd = match ground {
-            ColorGround::Back => "48",
-            ColorGround::Fore => "38",
+            ColorGround::BACK => "48",
+            ColorGround::FORE => "38",
         };
         let r = calc_legacy_colorbit(self.0);
         let g = calc_legacy_colorbit(self.1);
@@ -58,89 +53,137 @@ impl AnsiColor {
 
         format!("\x1b[{};5;{}m", cmd, color_code)
     }
+}
+
+#[pymethods]
+impl AnsiColor {
+    #[new]
+    fn new(r: u8, g: u8, b: u8) -> Self{
+        AnsiColor {0: r, 1: g, 2:b}
+    }
 
     pub fn to_string(&self, mode: &ColorMode, ground: &ColorGround) -> String {
         match mode {
-            ColorMode::TrueColor => self.truecolor_render(ground),
-            ColorMode::Limited => self.limited_render(ground)
+            ColorMode::TRUECOLOR => self.truecolor_render(ground),
+            ColorMode::LIMITED => self.limited_render(ground)
         }
+    }
+
+    // python __eq__ magic function
+    pub fn __eq__(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
 #[pyclass]
 #[derive(Clone, Copy)]
 pub enum ColorGround {
-    Back,
-    Fore
+    BACK,
+    FORE
 }
 #[pyclass]
 #[derive(Clone, Copy)]
 pub enum ColorMode {
-    Limited,
-    TrueColor
+    LIMITED,
+    TRUECOLOR
 }
 
 const ANSIRESET: &str = "\x1b[0m";
 const RESET_FOREGROUND: &str = "\x1b[0;39m";
 const RESET_BACKGROUND: &str = "\x1b[0;49m";
-
-#[pyclass]
-#[derive(Clone, Copy)]
-#[derive(PartialEq)]
-pub enum AnsiGraphicMode {
-    Bold      = 0,
-    Faint     = 1,
-    Italic    = 2,
-    Underline = 3,
-    Blinking  = 4,
-//  Undefined = 5,
-    Reverse   = 6,
-    Hidden    = 7,
-    Strike    = 8,
+bitflags! {
+    #[pyclass]
+    #[derive(Clone, Copy, PartialEq)]
+    pub struct AnsiGraphics: u8 {
+        const BOLD      = 0b00000001;
+        const FAINT     = 0b00000010;
+        const ITALIC    = 0b00000100;
+        const UNDERLINE = 0b00001000;
+        const BLINKING  = 0b00010000;
+        const REVERSE   = 0b00100000;
+        const HIDDEN    = 0b01000000;
+        const STRIKE    = 0b10000000;
+    }
 }
 
-#[pyclass]
-#[derive(Clone)]
-pub struct AnsiGraphics {
-    #[pyo3(get, set)]
-    pub modes: Vec<AnsiGraphicMode>
-}
-
-#[pymethods]
 impl AnsiGraphics {
-    const MAP: [(&'static str, &'static str); 9] = [
+    const IDX2ANSI: [(&'static str, &'static str); 8] = [
         // set    ,    reset  
-        ("\x1b[1m", "\x1b[22m"), // 0 -> bold
-        ("\x1b[2m", "\x1b[22m"), // 1 -> faint
-        ("\x1b[3m", "\x1b[23m"), // 2 -> italic
-        ("\x1b[4m", "\x1b[24m"), // 3 -> underline
-        ("\x1b[5m", "\x1b[25m"), // 4 -> blinking
-        ("", "")               , // 5 -> UNDEFINED
-        ("\x1b[7m", "\x1b[27m"), // 6 -> reverse
-        ("\x1b[8m", "\x1b[28m"), // 7 -> hidden
-        ("\x1b[9m", "\x1b[29m"), // 8 -> strike
+        ("\x1b[1m", "\x1b[22m"), // 0 -> BOLD
+        ("\x1b[2m", "\x1b[22m"), // 1 -> FAINT
+        ("\x1b[3m", "\x1b[23m"), // 2 -> ITALIC
+        ("\x1b[4m", "\x1b[24m"), // 3 -> UNDERLINE
+        ("\x1b[5m", "\x1b[25m"), // 4 -> BLINKING
+        ("\x1b[7m", "\x1b[27m"), // 5 -> REVERSE
+        ("\x1b[8m", "\x1b[28m"), // 6 -> HIDDEN
+        ("\x1b[9m", "\x1b[29m"), // 7 -> STRIKE
         ];
     
-    #[staticmethod]
+    const NAME2IDX: [(&'static str, u8); 8] = [
+        // set    ,    reset  
+        ("BOLD", 0), 
+        ("FAINT", 1), 
+        ("ITALIC", 2), 
+        ("UNDERLINE", 3), 
+        ("BLINKING", 4),
+        ("REVERSE", 5),
+        ("HIDDEN", 6),
+        ("STRIKE", 7),
+        ];
+
     #[inline]
-    pub fn get_mode(mode: AnsiGraphicMode, reset: bool) -> &'static str {
-        let idx = mode as usize;
-        let mode = match Self::MAP.get(idx) {
+    pub fn get_mode(name: &str, reset: bool) -> &'static str {
+        let mut i: usize = 0;
+        let idx = loop {
+            if i < Self::NAME2IDX.len(){
+                let mapping = Self::NAME2IDX[i];
+                if mapping.0 == name.to_uppercase() {
+                    break mapping.1 as i16
+                }
+                i += 1;
+            } else {
+                break -1
+            }
+        };
+
+        if idx == -1{
+            print!("Could not find mode with name \"{}\".", name);
+            panic!()
+        }
+
+        let idx: usize = idx as usize;
+
+        let graphic_ansi_codes = match Self::IDX2ANSI.get(idx) {
             None => {("", "")},
             Some(t) => {t.clone()}
         };
 
         match reset {
-            false => {mode.0},
-            true => {mode.1}
+            false => {graphic_ansi_codes.0},
+            true => {graphic_ansi_codes.1}
         }
+    }
+}
+
+#[pymethods]
+impl AnsiGraphics {
+    #[new]
+    #[inline]
+    fn new() -> Self{
+        AnsiGraphics::empty()
+    }
+
+    #[staticmethod]
+    #[inline]
+    fn _from_bits(bits: u8) -> Option<AnsiGraphics>{
+        AnsiGraphics::from_bits(bits)
     }
 
     pub fn to_string(&self, reset: bool) -> String {
         let mut result = String::new();
 
-        for mode in self.modes.clone() {
-            result.push_str(Self::get_mode(mode, reset))
+        for mode in self.iter_names() {
+            result.push_str(Self::get_mode(mode.0, reset))
         }
 
         result
@@ -151,49 +194,17 @@ impl AnsiGraphics {
         self.to_string(false)
     }
 
-    // TODO: optimize, this is 2o(n*m)
-    pub fn is_eq(&self, other: &Self) -> bool {
-        if self.modes.len() != other.modes.len() {
-            return false;
-        }
-
-        // loop into all self.modes
-        for agm in self.modes.clone() {
-            // if other.modes does not contain one of the agms, return false
-            if !other.modes.contains(&agm) {
-                return false;
-            }
-        }
-
-        // loop into all other.modes
-        for agm in other.modes.clone() {
-            // if self.modes does not contain one of the agms, return false
-            if !self.modes.contains(&agm) {
-                return false;
-            }
-        }
-
-        // if no inequalities are found return true
-        true
+    // python __eq__ magic function
+    pub fn __eq__(&self, other: &Self) -> bool{
+        self == other
     }
 
-    pub fn add(&mut self, agm: AnsiGraphicMode) {
-        if !self.modes.contains(&agm){
-            self.modes.push(agm);
+    // python __or__ magic function
+    pub fn __or__(&self, other: &Self) -> Self{
+        let res = AnsiGraphics::from_bits(self.bits() | other.bits());
+        match res {
+            None => {AnsiGraphics::empty()}
+            Some(r) => {r}
         }
     }
-
-    // python operation add
-    pub fn __add__(&mut self, agm: AnsiGraphicMode) -> Self{
-        let mut r = self.clone();
-        r.add(agm);
-        
-        r
-    }
-
-    #[new]
-    fn new() -> Self{
-        AnsiGraphics {modes: Vec::new()}
-    }
-
 }

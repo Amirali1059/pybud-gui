@@ -9,11 +9,11 @@ def input_dialog(WIDTH=76):
     """ the main dialog """
 
     title = AStr("PyBUD: GUI Beauty", fore = (20, 250, 120))
-    title.add_graphics(AnsiGraphicMode.Bold)
+    title.add_graphics(AnsiGraphicMode.BOLD | AnsiGraphicMode.UNDERLINE)
     
     title = AStr("[ ") + title + AStr(" ]")
     caption = "A python library for creating beautiful GUIs in console, with tons of diffrent components, such as Dialogs, Widgets, Drawables, color optimization, and more!"
-    mydialog = AutoDialog(width=WIDTH, ctype=ColorMode.TrueColor, background_color = (90, 110, 220))
+    mydialog = AutoDialog(width=WIDTH, ctype=ColorMode.TRUECOLOR, background_color = (90, 110, 220))
 
     mydialog.add_widget(WidgetLabel(
         title,
@@ -80,12 +80,14 @@ def input_dialog(WIDTH=76):
 
 
 if __name__ == "__main__":
-    #ansi.InitAnsi()
+    # only for windows users
+    import pybud.drawer.ansi as ansi
+    ansi.init()
 
     mydialog = input_dialog()
 
-    # print dialog summery
-    # print(mydialog)
+    #print dialog summery
+    #print(mydialog)
 
     # mydialog.show()
     text = mydialog.show()

@@ -7,16 +7,17 @@ use crate::ansi::ColorMode;
 
 use super::AnsiColor;
 
-#[pyclass]
 #[derive(Clone, Copy)]
 struct Size {
     height: usize,
     width: usize
 }
 
+#[derive(Clone)]
 #[pyclass]
 pub struct Drawer {
     size: Size,
+    #[pyo3(get, set)]
     plane: Vec<AnsiString>,
 }
 
@@ -24,14 +25,31 @@ fn get_string_with_len(len: usize) -> String {
     " ".repeat(len).to_string()
 }
 
+// non-python methods
+impl Drawer {
+    fn check_write_position(&self, pos: (usize, usize)) -> bool{
+        //assert!(pos.0 <= self.size.height);
+        //assert!(pos.1 <= self.size.width);
+
+        (pos.0 == self.size.height) || (pos.1 == self.size.width) ||
+        (pos.0 > self.size.height) || (pos.1 > self.size.width)
+    }
+}
+
+// python methods
 #[pymethods]
 impl Drawer {
+    const DEFAULT_PLANE_COLOR: (u8, u8, u8) = (110, 90, 250);
     #[new]
     #[inline]
     pub fn new(size: (usize, usize), plane_color: Option<(u8, u8, u8)>) -> Drawer {
+        let default_or_given_plane_color = match plane_color {
+            None => {Self::DEFAULT_PLANE_COLOR}
+            Some(c) => {c}
+        };
         let mut plane: Vec<AnsiString> = Vec::with_capacity(size.0);
         for _ in 0..size.0 {
-            plane.push(AnsiString::new_back(get_string_with_len(size.1).as_str(), plane_color));
+            plane.push(AnsiString::new_back(get_string_with_len(size.1).as_str(), default_or_given_plane_color));
         }
         
         Drawer {
@@ -54,33 +72,7 @@ impl Drawer {
 
     // python __str__ magic function
     pub fn __str__(&self) -> String{
-        self.render(&ColorMode::TrueColor)
-    }
-
-    fn check_write_position(&self, pos: (usize, usize)) -> bool{
-        //assert!(pos.0 <= self.size.height);
-        //assert!(pos.1 <= self.size.width);
-
-        (pos.0 == self.size.height) || (pos.1 == self.size.width) ||
-        (pos.0 > self.size.height) || (pos.1 > self.size.width)
-    }
-
-    pub fn place_str(&mut self, str: &str, pos: (usize, usize)) {
-        // checks if we can write, and if index is out of bounds, returns
-        if self.check_write_position(pos) {
-            return
-        }
-
-        let mut _string = str.to_string();
-
-        let write_len = str.len();
-        let end_idx = pos.1 + write_len;
-
-        if end_idx > self.size.width {
-            _string = _string.split_at(write_len - (end_idx - self.size.width)).0.to_string();
-        }
-
-        self.plane[pos.0].place_str(_string.as_str(), pos.1);
+        self.render(&ColorMode::TRUECOLOR)
     }
 
     pub fn place(&mut self, astr: &AnsiString, pos: (usize, usize), assign: bool) {
@@ -105,6 +97,24 @@ impl Drawer {
         self.place(astr, (ypos, xpos), assign);
     }
 
+    pub fn place_str(&mut self, str: &str, pos: (usize, usize)) {
+        // checks if we can write, and if index is out of bounds, returns
+        if self.check_write_position(pos) {
+            return
+        }
+
+        let mut _string = str.to_string();
+
+        let write_len = str.len();
+        let end_idx = pos.1 + write_len;
+
+        if end_idx > self.size.width {
+            _string = _string.split_at(write_len - (end_idx - self.size.width)).0.to_string();
+        }
+
+        self.plane[pos.0].place_str(_string.as_str(), pos.1);
+    }
+
     pub fn center_place_str(&mut self, str: &str, ypos: usize) {
         let xpos: usize = (self.size.width - str.len()) / 2;
         self.place_str(str, (ypos, xpos));
@@ -122,9 +132,7 @@ impl Drawer {
             if rp0 > (other.plane.len() - 1) {
                 break;
             }  
-            if !border {
-                self.plane[i].place(&other.plane[i - pos.0], pos.1, false);
-            } else {
+            if border {
                 // other.plane's reletive line
                 let otprl = other.plane[i - pos.0].clone();
                 // border + otprl
@@ -144,72 +152,10 @@ impl Drawer {
                     }
                 }
 
-                // if rp0 == 0{
-                //     let bc0 = brl.vec[0].back_color.unwrap();
-                //     brl.vec[0].back_color = Some(AnsiColor {
-                //         0: (bc0.0 as f32 * 0.85) as u8,
-                //         1: (bc0.1 as f32 * 0.85) as u8,
-                //         2: (bc0.2 as f32 * 0.85) as u8,
-                //     });
-
-                //     for i in 1..(vl -1){
-                //         let bc0 = brl.vec[i].back_color.unwrap();
-                //         brl.vec[i].back_color = Some(AnsiColor {
-                //             0: (bc0.0 as f32 * 0.9) as u8,
-                //             1: (bc0.1 as f32 * 0.9) as u8,
-                //             2: (bc0.2 as f32 * 0.9) as u8,
-                //         });
-                //     }
-
-                //     let bc0 = brl.vec[(vl -1)].back_color.unwrap();
-                //     brl.vec[(vl -1)].back_color = Some(AnsiColor {
-                //         0: (bc0.0 as f32 * 0.80) as u8,
-                //         1: (bc0.1 as f32 * 0.80) as u8,
-                //         2: (bc0.2 as f32 * 0.80) as u8,
-                //     });
-                    
-                // } else if rp0 == (other.plane.len() -1){
-                //     let bc0 = brl.vec[0].back_color.unwrap();
-                //     brl.vec[0].back_color = Some(AnsiColor {
-                //         0: (bc0.0 as f32 * 0.65) as u8,
-                //         1: (bc0.1 as f32 * 0.65) as u8,
-                //         2: (bc0.2 as f32 * 0.65) as u8,
-                //     });
-
-                //     for i in 1..(vl - 1){
-                //         let bc0 = brl.vec[i].back_color.unwrap();
-                //         brl.vec[i].back_color = Some(AnsiColor {
-                //             0: (bc0.0 as f32 * 0.6) as u8,
-                //             1: (bc0.1 as f32 * 0.6) as u8,
-                //             2: (bc0.2 as f32 * 0.6) as u8,
-                //         });
-                //     }
-
-                //     let bc0 = brl.vec[(vl - 1)].back_color.unwrap();
-                //     brl.vec[(vl - 1)].back_color = Some(AnsiColor {
-                //         0: (bc0.0 as f32 * 0.55) as u8,
-                //         1: (bc0.1 as f32 * 0.55) as u8,
-                //         2: (bc0.2 as f32 * 0.55) as u8,
-                //     });
-                // } else {
-                //     let bc0 = brl.vec[0].back_color.unwrap();
-                //     brl.vec[0].back_color = Some(AnsiColor {
-                //         0: (bc0.0 as f32 * 0.8) as u8,
-                //         1: (bc0.1 as f32 * 0.8) as u8,
-                //         2: (bc0.2 as f32 * 0.8) as u8,
-                //     });
-
-                //     let l = brl.vec.len();
-                //     let bcl = brl.vec[l -1].back_color.unwrap();
-                //     brl.vec[l -1].back_color = Some(AnsiColor {
-                //         0: (bc0.0 as f32 * 0.7) as u8,
-                //         1: (bc0.1 as f32 * 0.7) as u8,
-                //         2: (bc0.2 as f32 * 0.7) as u8,
-                //     });
-                // }
-
                 self.plane[i].place(&brl, pos.1, false);
                 
+            } else {
+                self.plane[i].place(&other.plane[i - pos.0], pos.1, false);
             }
             
         }

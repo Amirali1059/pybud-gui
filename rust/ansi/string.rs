@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::ansi::AnsiGraphics; // TODO: implement optimized rendering
 
-use super::{AnsiGraphicMode, ColorGround, ColorMode, ANSIRESET, RESET_BACKGROUND, RESET_FOREGROUND};
+use super::{AnsiColor, ColorGround, ColorMode, ANSIRESET, RESET_BACKGROUND, RESET_FOREGROUND};
 use super::char::AnsiChar;
 
 #[pyclass]
@@ -23,16 +23,12 @@ fn max(a: usize, b: usize) -> usize {
     if a > b {a} else {b}
 }
 
-#[pymethods]
+// non-python methods
 impl AnsiString {
     pub fn len(&self) -> usize {
         self.vec.len()
     }
 
-    // python len function
-    pub fn __len__(&self) -> usize {
-        self.len()
-    }
     // not optimized to_string, each character is rendered individually
     pub fn to_string_noopt(&self, mode: &ColorMode) -> String {
         let mut _string = String::new();
@@ -41,6 +37,37 @@ impl AnsiString {
             _string.push_str(ANSIRESET);
         }
         _string
+    }
+
+    #[inline]
+    pub fn new_fore(str: &str, fore: (u8, u8, u8)) -> AnsiString {
+        AnsiString::new(str, Some(fore), None)
+    }
+
+    #[inline]
+    pub fn new_back(str: &str, back: (u8, u8, u8)) -> AnsiString {
+        AnsiString::new(str, None, Some(back))
+    }
+
+    #[inline]
+    pub fn new_colorless(str: &str) -> AnsiString {
+        AnsiString::new(str, None, None)
+    }
+}
+
+// python methods
+#[pymethods]
+impl AnsiString {
+    #[new]
+    #[inline]
+    pub fn new(str: &str, fore: Option<(u8, u8, u8)>, back: Option<(u8, u8, u8)>) -> AnsiString {
+        let mut vec: Vec<AnsiChar> = Vec::with_capacity(str.len());
+    
+        for c in str.chars() {
+            vec.push(AnsiChar::new(c, fore, back));
+        }
+
+        AnsiString {vec: vec}
     }
 
     // optimized to_string
@@ -77,20 +104,20 @@ impl AnsiString {
                 // set background if exists
                 _string.push_str(match cbc {
                     None => {String::new()},
-                    Some(c) => {c.to_string(mode, &ColorGround::Back)},
+                    Some(c ) => {c.to_string(mode, &ColorGround::BACK)},
                 }.as_str());
 
                 // set foreground if exists
                 _string.push_str(match cfc {
                     None => {String::new()},
-                    Some(c) => {c.to_string(mode, &ColorGround::Fore)},
+                    Some(c) => {c.to_string(mode, &ColorGround::FORE)},
                 }.as_str());
 
                 // write current AnsiGraphics AGAIN
                 _string.push_str(cag.to_string(false).as_str());
             }
 
-            if !pag.is_eq(&cag) {
+            if pag != cag {
                 // reset previus AnsiGraphics
                 _string.push_str(pag.to_string(true).as_str());
                 // write current AnsiGraphics
@@ -102,11 +129,6 @@ impl AnsiString {
         }
         // append reset token and return
         _string + "\x1b[0m"
-    }
-
-    // python __str__ magic function
-    pub fn __str__(&self) -> String{
-        self.to_string(&ColorMode::TrueColor)
     }
 
     pub fn split_at(&self, mid: usize) -> (AnsiString, AnsiString){
@@ -165,9 +187,9 @@ impl AnsiString {
         self.place(&astr, pos, false);
     }
 
-    pub fn add_graphics(&mut self, agm: AnsiGraphicMode) {
+    pub fn add_graphics(&mut self, agm: AnsiGraphics) {
         for ac in &mut self.vec {
-            ac.graphics.add(agm);
+            ac.graphics = ac.graphics | agm;
         }
     }
 
@@ -179,34 +201,14 @@ impl AnsiString {
         r
     }
 
-    #[new]
-    #[inline]
-    pub fn new(str: &str, fore: Option<(u8, u8, u8)>, back: Option<(u8, u8, u8)>) -> AnsiString {
-        let mut vec: Vec<AnsiChar> = Vec::with_capacity(str.len());
-    
-        for c in str.chars() {
-            vec.push(AnsiChar::new(c, fore, back));
-        }
-
-        AnsiString {vec: vec}
+    // python len function
+    pub fn __len__(&self) -> usize {
+        self.len()
     }
 
-    #[staticmethod]
-    #[inline]
-    pub fn new_fore(str: &str, fore: Option<(u8, u8, u8)>) -> AnsiString {
-        AnsiString::new(str, fore, None)
-    }
-
-    #[staticmethod]
-    #[inline]
-    pub fn new_back(str: &str, back: Option<(u8, u8, u8)>) -> AnsiString {
-        AnsiString::new(str, None, back)
-    }
-
-    #[staticmethod]
-    #[inline]
-    pub fn new_colorless(str: &str) -> AnsiString {
-        AnsiString::new(str, None, None)
+    // python __str__ magic function
+    pub fn __str__(&self) -> String{
+        self.to_string(&ColorMode::TRUECOLOR)
     }
 }
 

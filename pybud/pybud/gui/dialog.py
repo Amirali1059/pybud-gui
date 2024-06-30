@@ -1,20 +1,19 @@
-
+# python built-in imports
 import time
 from threading import Thread
-from typing import List
-
+# internal imports
+from pybud.drawer import Drawer
+from pybud.drawer.ansi import AnsiString as AStr
+from pybud.drawer.color import ColorMode
+#relative impotrs
+from .widgets import Widget
+# external imports
 try:
     from readchar import key as Key
     from readchar import readkey
 except ModuleNotFoundError:
-    print("Unable to find dependency module named 'readchar', install using 'pip install readchar'")
+    print("Unable to find 'readchar' package, install it using `pip install readchar`")
     exit(1)
-
-from pybud.drawer import Drawer
-from pybud.drawer.ansi import AnsiString as AStr
-from pybud.drawer.color import ColorMode
-
-from .widgets import Widget
 
 DEFAULT_BACKGROUND_COLOR = (110, 90, 250)
 
@@ -24,7 +23,7 @@ TPS = 20
 
 class Drawable():
     def __init__(self, ctype: ColorMode = None):
-        self.ctype = ctype
+        self.ctype = ColorMode.TRUECOLOR if ctype is None else ctype
         self.width = None
         self.height = None
         self.background_color = DEFAULT_BACKGROUND_COLOR
@@ -108,7 +107,7 @@ class DialogBase(Drawable):
         super().__init__(ctype)
         self.width = width
         self.background_color = background_color
-        self.widgets: List[Widget] = []
+        self.widgets: list[Widget] = []
         self.set_active_widget(0)
         self.result = None
         self.tick = 0
