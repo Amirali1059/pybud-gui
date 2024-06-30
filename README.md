@@ -4,6 +4,8 @@
 
 **A python library for creating beautiful GUIs in console, with tons of different components, such as `Dialog`s, `Widget`s, `Drawable`s, `Drawer`, and more!**
 
+![PyBUD](images/pybud.gif)
+
 ---
 ## Installation:
 

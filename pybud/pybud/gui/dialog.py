@@ -277,9 +277,9 @@ class AutoDialog(DialogBase):
         animation = "▁▂▃▄▅▆▆▅▄▃▂▁▂ "
 
         def get_admination(tick, n=3):
-            #rt = tick
-            #return animation[rt % (len(animation)-n):rt % (len(animation)-n)+n]
-            return round(1 / (time.time() - self.last_draw_time)).__str__()
+            rt = tick
+            return animation[rt % (len(animation)-n):rt % (len(animation)-n)+n]
+            #return round(1 / (time.time() - self.last_draw_time)).__str__()
         self.drawer.place(AStr(get_admination(self.tick)), pos=(0, 1), assign = False)
 
     def show(self):
