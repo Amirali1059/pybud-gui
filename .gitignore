@@ -11,5 +11,9 @@
 **/test*.py
 **/*test.py
 **/*-test.py
-# ignore dist directory
-dist
+# ignore dist, build and target directories
+**/dist
+**/build
+**/target
+# ignore all .whl files
+**/*.whl

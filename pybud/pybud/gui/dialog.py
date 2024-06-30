@@ -10,18 +10,20 @@ except ModuleNotFoundError:
     print("Unable to find dependency module named 'readchar', install using 'pip install readchar'")
     exit(1)
 
-import pybud.ansi as ansi
-from pybud.drawing import ColoredString as CStr
-from pybud.drawing import ColorType, Drawer
+from pybud.drawer import Drawer
+from pybud.drawer.ansi import AnsiString as AStr
+from pybud.drawer.color import ColorMode
+
 from .widgets import Widget
-from ..deftypes import DEFAULT_BACKGROUND_COLOR
+
+DEFAULT_BACKGROUND_COLOR = (110, 90, 250)
 
 LAST_SHOWN_DRAWABLE = None
 # ticks per second
 TPS = 20
 
 class Drawable():
-    def __init__(self, ctype: ColorType = None):
+    def __init__(self, ctype: ColorMode = None):
         self.ctype = ctype
         self.width = None
         self.height = None
@@ -33,6 +35,7 @@ class Drawable():
         # self.last_update = 0
         self.tickupdate_thread: Thread = None
         self.tickupdate_started = False
+        self.tick_memory = []
 
     def onClose(self):
         self.close()
@@ -42,11 +45,10 @@ class Drawable():
         while self.tickupdate_thread.is_alive():
             time.sleep(0.01)
         self.tickupdate_started = False
-        ansi.go_up(self.height)
-        ansi.write(("\n" + " " * self.width) * (self.height))
-        ansi.write(f"\033M" * self.height)
-        ansi.write(f"\r" + " " * self.width)
-        ansi.write(f"\033M\n")
+        print(f"\033[{self.height}F", end = "")        
+        print(("\n" + " " * self.width) * (self.height), end = "")
+        print("\033M" * self.height, end = "\r")
+        print(" " * self.width + "\033M")
 
     def update(self, key: str):
         if key == Key.CTRL_C:
@@ -56,11 +58,18 @@ class Drawable():
         return key
 
     def doTickUpdates(self):
-        t = time.time()
         while not self.closed:
-            time.sleep(max(0, 1/TPS - (time.time() - t)))
-            self.update("UPDATE")
+            # records the delay caused by an update and subtracts
+            # that from tick waiting time.  
             t = time.time()
+            self.update("UPDATE")
+            real_delay = (time.time() - t) 
+            self.tick_memory.append(real_delay)
+            self.tick_memory = self.tick_memory[-5:]
+
+            frame_time = (1 / TPS) - (sum(self.tick_memory) / len(self.tick_memory))
+
+            time.sleep(max(0, frame_time))
 
     def doKeyUpdates(self):
         while not self.closed:
@@ -76,7 +85,7 @@ class Drawable():
 
         self.closed = False
 
-        ansi.write("\n" * self.height)
+        print("\n" * self.height, end="")
         self.draw()
 
         if not self.tickupdate_started:
@@ -86,7 +95,7 @@ class Drawable():
         self.doKeyUpdates()
 
     def get_drawer(self):
-        return Drawer(size=(self.width, self.height), background_color=self.background_color)
+        return Drawer(size=(self.height, self.width), plane_color=self.background_color)
 
     def draw(self):
         if not self.closed:
@@ -95,7 +104,7 @@ class Drawable():
 
 
 class DialogBase(Drawable):
-    def __init__(self, width: int, ctype: ColorType = None, background_color: tuple[int, int, int] = None):
+    def __init__(self, width: int, ctype: ColorMode = None, background_color: tuple[int, int, int] = None):
         super().__init__(ctype)
         self.width = width
         self.background_color = background_color
@@ -104,11 +113,12 @@ class DialogBase(Drawable):
         self.result = None
         self.tick = 0
         self.totw = 0
+        self.last_draw_time = time.time()
 
     def update_height(self):
         max_height = 0
         for w in self.widgets:
-            widget_height = w.pos.getY() + w.size.getHeight()
+            widget_height = w.pos[1] + w.size[1]
             if widget_height > max_height:
                 max_height = widget_height
 
@@ -117,6 +127,7 @@ class DialogBase(Drawable):
 
     def add_widget(self, w: Widget):
         w.on_add(self)
+        w.background_color = self.background_color
         self.widgets.append(w)
         # self.height += w.size.getHeight()
         self.update_height()
@@ -178,7 +189,7 @@ class DialogBase(Drawable):
         if key == "UPDATE":
             self.tick += 1
 
-        if draw:
+        if draw and key == "UPDATE":
             self.draw()
         else:
             return key
@@ -186,10 +197,11 @@ class DialogBase(Drawable):
     def draw_widgets(self, drawer: Drawer):
         active_w = self.get_active_widget()
         for w in self.widgets:
+            
             border = w is active_w
             w_render = w.get_render()
             drawer.place_drawer(
-                w_render, (w.pos.getX(), w.pos.getY()), borderless=not border)
+                w_render, (w.pos[1], w.pos[0]), border=border)
         return drawer
 
     def render(self):
@@ -200,11 +212,12 @@ class DialogBase(Drawable):
             return
         super().draw()
         self.render()
-        ansi.go_up(self.height)
-        ansi.write(self.drawer.tostring(self.ctype) + "\n")
-        ansi.flush()
+
+        print(f"\033[{self.height}F", end="")
+        print(self.drawer.render(self.ctype), end="")
         # time.sleep(0.01)
         self.drawing = False
+        self.last_draw_time = time.time()
 
     def show(self):
         super().show()
@@ -218,7 +231,7 @@ class DialogBase(Drawable):
 
 
 class AutoDialog(DialogBase):
-    def __init__(self, width: int, ctype: ColorType = None, background_color: tuple[int, int, int] = None, mode: str = "v"):
+    def __init__(self, width: int, ctype: ColorMode = None, background_color: tuple[int, int, int] = None, mode: str = "v"):
         super().__init__(width, ctype)
         assert mode in ["v", "iv", "h", "ih"], f"Unknown mode \"{mode}\"!"
         self.mode = mode.lower()
@@ -265,9 +278,10 @@ class AutoDialog(DialogBase):
         animation = "▁▂▃▄▅▆▆▅▄▃▂▁▂ "
 
         def get_admination(tick, n=3):
-            rt = tick
-            return animation[rt % (len(animation)-n):rt % (len(animation)-n)+n]
-        self.drawer.place(CStr(get_admination(self.tick)), pos=(1, 0))
+            #rt = tick
+            #return animation[rt % (len(animation)-n):rt % (len(animation)-n)+n]
+            return round(1 / (time.time() - self.last_draw_time)).__str__()
+        self.drawer.place(AStr(get_admination(self.tick)), pos=(0, 1), assign = False)
 
     def show(self):
         super().show()

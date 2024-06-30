@@ -1,61 +1,59 @@
-import pybud.ansi as ansi
-from pybud.ansi import ColorType
-from pybud.deftypes import Point, Size
-from pybud.drawing import ColoredString as CStr
+from pybud.drawer.ansi import AnsiGraphicMode
+from pybud.drawer.ansi import AnsiString as AStr
+from pybud.drawer.color import ColorMode
+
 from pybud.gui.dialog import AutoDialog, DialogBase
 from pybud.gui.widgets import WidgetInput, WidgetLabel, WidgetOptions
-
 
 def input_dialog(WIDTH=76):
     """ the main dialog """
 
-    title = CStr("[") + CStr(" " + "PyBUD: GUI Beauty" +
-                             " ", forecolor=(255, 0, 0)) + CStr("]")
+    title = AStr("PyBUD: GUI Beauty", fore = (20, 250, 120))
+    title.add_graphics(AnsiGraphicMode.Bold)
+    
+    title = AStr("[ ") + title + AStr(" ]")
     caption = "A python library for creating beautiful GUIs in console, with tons of diffrent components, such as Dialogs, Widgets, Drawables, color optimization, and more!"
-    mydialog = AutoDialog(width=WIDTH, ctype=ColorType.TRUECOLOR, background_color = (110, 90, 250))
+    mydialog = AutoDialog(width=WIDTH, ctype=ColorMode.TrueColor, background_color = (90, 110, 220))
 
     mydialog.add_widget(WidgetLabel(
         title,
-        size=Size(WIDTH),  # height will be owerwritten in WidgetLabel
-        pos=Point(0, 1),
+        size = [WIDTH, None],  # height will be owerwritten in WidgetLabel
+        pos = [0, 1],
     ))
-
+    
     mydialog.add_widget(WidgetLabel(
         caption,
-        centered=True,
-        size=Size(WIDTH),  # height will be owerwritten in WidgetLabel
-        pos=Point(0, 2),
+        centered = True,
+        size = [WIDTH, None],  # height will be owerwritten in WidgetLabel
+        pos = [0, 2],
+        padding = 4
     ))
 
     mydialog.add_widget(WidgetInput(
         "text input: ",
-        size=Size(WIDTH//2 - 4),  # height will be owerwritten in WidgetLabel
-        pos=Point(2, 6),
+        size = [WIDTH//2 - 4, None],  # height will be owerwritten in WidgetLabel
+        pos = [2, 6],
     ))
     mydialog.add_widget(WidgetInput(
         "another text input: ",
-        size=Size(WIDTH//2 - 4),  # height will be owerwritten in WidgetLabel
-        pos=Point(WIDTH//2 + 2, 6),
+        size = [WIDTH//2 - 4, None],  # height will be owerwritten in WidgetLabel
+        pos = [WIDTH//2 + 2, 6],
     ))
 
     def briliant_option(self: DialogBase):
-        ansi.write("Briliant!        \r")
-        ansi.flush()
+        print("Briliant!         ", end="\r")
         return "Briliant!"
 
     def verycool_option(self: DialogBase):
-        ansi.write("Very Cool!        \r")
-        ansi.flush()
+        print("Very Cool!        ", end="\r")
         return "Very Cool!"
 
     def nice_option(self: DialogBase):
-        ansi.write("Nice!             \r")
-        ansi.flush()
+        print("Nice!             ", end="\r")
         return "Nice!"
 
     def awesome_option(self: DialogBase):
-        ansi.write("Awesome!          \r")
-        ansi.flush()
+        print("Awesome!          ", end="\r")
         return "Awesome!"
     # the text and callback function for each option
     options = [
@@ -66,23 +64,23 @@ def input_dialog(WIDTH=76):
     ]
     mydialog.add_widget(WidgetOptions(
         options,
-        size=Size(WIDTH-4),  # height will be owerwritten in WidgetOptions
-        pos=Point(2, 8),
+        size = [WIDTH-4, None],  # height will be owerwritten in WidgetOptions
+        pos = [2, 8],
     ))
     mydialog.add_widget(WidgetLabel(
-        CStr("Tip: ", forecolor=(220, 220, 0)) +
-        CStr("you can use TAB or arrow keys to switch between selectable Widgets! and use ") + CStr("Ctrl + C", forecolor=(220, 220, 0)) +
-        CStr(" or press enter on (InputWidget)s to exit!"),
+        AStr("Tip: ", fore = (255, 128, 0)) +
+        AStr("you can use TAB or arrow keys to switch between selectable Widgets, use ") + AStr("Ctrl + C", fore = (255, 128, 0)) +
+        AStr(" or press enter on text inputs to exit."),
         centered=True,
-        size=Size(WIDTH - 24),  # height will be owerwritten in WidgetLabel
-        pos=Point(22, 9),
+        size = [WIDTH - 26, None],  # height will be owerwritten in WidgetLabel
+        pos = [22, 9],
         name = "LastLabel"
     ))
     return mydialog
 
 
 if __name__ == "__main__":
-    ansi.InitAnsi()
+    #ansi.InitAnsi()
 
     mydialog = input_dialog()
 
