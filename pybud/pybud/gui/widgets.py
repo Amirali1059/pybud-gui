@@ -30,7 +30,7 @@ class WidgetBase():
         self.result = None
 
     def get_name(self):
-        name =  self.__class__.__name__
+        name = self.__class__.__name__
         c = 0
         for w in self.parent.widgets:
             if isinstance(w, self.__class__):
