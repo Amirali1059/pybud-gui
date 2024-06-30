@@ -3,9 +3,7 @@ from pybud.gui.dialog import AutoDialog
 # import widgets
 from pybud.gui.widgets import WidgetLabel
 # import `ColoredString` (using this class you can define text with color)
-from pybud.drawing import ColoredString as CStr
-# import types
-from pybud.deftypes import Point, Size
+from pybud.drawer.ansi import AnsiString as AStr
 
 # build the main dialog, set width and background color
 d = AutoDialog(width=60, background_color=(90, 90, 250))
@@ -13,9 +11,9 @@ d = AutoDialog(width=60, background_color=(90, 90, 250))
 d.add_widget(WidgetLabel(
     # define a ColoredString object that renders text with colors
     # you can set both forecolor and backcolor
-    text=CStr("Hello world!", forecolor=(90, 250, 90)),
-    pos=Point(y=1),
-    size=Size(w=60)
+    text=AStr("Hello world!", fore = (90, 250, 90)),
+    pos=[0, 1],
+    size=[60, None]
     )
 )
 # show the dialog

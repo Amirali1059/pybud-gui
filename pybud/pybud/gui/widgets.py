@@ -1,12 +1,14 @@
 
 import types
 
-from pybud.drawing import ColoredString as CStr
-from pybud.drawing import ColoredStringList as CStrList
-from pybud.drawing import ColorType, Drawer
+from pybud.drawer import Drawer
+from pybud.drawer.ansi import AnsiGraphicMode
+from pybud.drawer.ansi import AnsiString as AStr
+from pybud.drawer.color import ColorMode
+
 from readchar import key as Key
 
-from ..deftypes import Point, Size, DEFAULT_BACKGROUND_COLOR
+DEFAULT_BACKGROUND_COLOR = (110, 90, 250)
 
 def default(d: dict, k:str, default):
     if k in d.keys():
@@ -15,11 +17,11 @@ def default(d: dict, k:str, default):
         return default
 
 class WidgetBase():
-    def __init__(self, size: Size = None, pos: Point = Point(0, 0), **kwargs):
+    def __init__(self, size: list[int, int] = None, pos: list[int, int] = [0, 0], **kwargs):
         # set variabled
-        self.ctype = default(kwargs, "ctype", ColorType.LEGACY)
-        self.size = Size(10, 20) if size is None else size
-        self.pos = Point(0, 0) if pos is None else pos
+        self.ctype = default(kwargs, "ctype", ColorMode.LIMITED)
+        self.size = [6, 60] if size is None else size
+        self.pos = [0, 0] if pos is None else pos
         # defaults
         self.background_color = DEFAULT_BACKGROUND_COLOR
         self.name = default(kwargs, "name", "__name__")
@@ -45,7 +47,7 @@ class WidgetBase():
         pass
 
     def get_drawer(self):
-        return Drawer(size=(self.size.getWidth(), self.size.getHeight()), background_color=self.background_color)
+        return Drawer(size=tuple(self.size[::-1]), plane_color=self.background_color)
 
     def render(self):
         pass
@@ -60,7 +62,7 @@ class WidgetBase():
 
 
 class Widget(WidgetBase):
-    def __init__(self, size: Size = None, pos: Point = Point(0, 0), **kwargs):
+    def __init__(self, size: list[int, int] = None, pos: list[int, int] = [0, 0], **kwargs):
         super().__init__(size, pos, **kwargs)
         # defaults
         self.is_disabled = False
@@ -90,21 +92,23 @@ class WidgetLabel(Widget):
                  text,
                  centered: bool = True,
                  wordwrap: bool = True,
-                 size: Size = None,
-                 pos: Point = Point(0, 0),
+                 size: list[int, int] = None,
+                 pos: list[int, int] = [0, 0],
+                 padding: int = 2,
                  **kwargs
                  ):
 
         super().__init__(size, pos, **kwargs)
 
         if isinstance(text, str):
-            self.text = CStr(text, forecolor=(220, 220, 220))
-        elif isinstance(text, CStr) or isinstance(text, CStrList):
+            self.text = AStr(text, fore = (220, 220, 220))
+        elif isinstance(text, AStr):
             self.text = text
         else:
             raise NotImplementedError()
 
-        self.size.h = (len(text) // (self.size.w - 8)) + 1
+        self.pad = padding
+        self.size[1] = (len(text) // (self.size[0] - (2*self.pad))) + 1
         self.centered = centered
         self.wordwrap = wordwrap
         self.selectable = False
@@ -112,26 +116,27 @@ class WidgetLabel(Widget):
     def run_callbacks(self):
         pass
 
-    def _place_text(self, text, ln_idx):
+    def _place_text(self, text, ypos):
         if self.centered:
-            self.drawer.center_place(text, ln_idx=ln_idx)
+            self.drawer.center_place(text, ypos = ypos, assign = False)
         else:
-            self.drawer.place(text, pos=(0, ln_idx))
+            self.drawer.place(text, pos=(ypos, 0), assign = False)
 
     def place_text(self, t, ln_idx):
-        #print(t)
-        if len(t) > (self.size.getWidth() - 8):
+        p = 2*self.pad
+
+        if len(t) > (self.size[0] - p):
             for i in range(len(t)):
                 i_ = len(t) - i - 1
-                if i_ > (self.size.getWidth() - 8):
+                if i_ > (self.size[0] - p):
                     continue
-                c = t[i_]
-                if isinstance(c, str) and c == " ":
+                if isinstance(t, str) and t[i_] == " ":
                     self._place_text(t[:i_], ln_idx)
                     return self.place_text(t[i_+1:], ln_idx + 1)
-                if isinstance(c, CStr) and c.str == " ":
-                    self._place_text(t[:i_], ln_idx)
-                    return self.place_text(t[i_+1:], ln_idx + 1)
+                if isinstance(t, AStr) and t.vec[i_].char == " ":
+                    t_0, t_1 = t.split_at(i_)
+                    self._place_text(t_0, ln_idx)
+                    return self.place_text(t_1, ln_idx + 1)
         else:
             self._place_text(t, ln_idx)
 
@@ -144,8 +149,8 @@ class WidgetOptions(Widget):
                  options: list[tuple[str, types.FunctionType]],
                  text: str = "Options:",
                  default_option: int = 0,
-                 size: Size = None,
-                 pos: Point = Point(0, 0),
+                 size: list[int, int] = None,
+                 pos: list[int, int] = [0, 0],
                  **kwargs
                  ):
 
@@ -155,7 +160,7 @@ class WidgetOptions(Widget):
         self.text = text
         self.callbacks = list(map(lambda x: x[1], options))
         self.selected = default_option
-        self.size.h = 1 + self.n_options
+        self.size[1] = 1 + self.n_options
 
     def run_callbacks(self):
         self.result = self.callbacks[self.selected](self.parent)
@@ -173,31 +178,29 @@ class WidgetOptions(Widget):
 
     def render(self):
         caption_start = 2
-        __options = self.text.ljust(self.size.getWidth()-caption_start)
-        self.drawer.place(CStr(__options, forecolor=(
-            220, 220, 220)), pos=(caption_start, 0))
+        __options = self.text.ljust(self.size[0] - caption_start)
+        self.drawer.place(AStr(__options, fore=(220, 220, 220)), pos=(0, caption_start), assign = False)
         for i, option in enumerate(self.options):
             if i == self.selected:
                 option_color = (50, 220, 80)
-                option_indicator = CStr("> ", forecolor=(220, 220, 220))
+                option_indicator = AStr("> ", fore=(220, 220, 220))
             else:
                 option_color = (220, 220, 220)
-                option_indicator = CStr("  ", forecolor=(220, 220, 220))
-            __option = CStr(option, forecolor=option_color)
-            self.drawer.place(option_indicator + __option,
-                              pos=(caption_start, 1 + i))
+                option_indicator = AStr("  ", fore=(220, 220, 220))
+            __option = AStr(option, fore=option_color)
+            self.drawer.place(option_indicator + __option, pos=(i + 1, caption_start), assign = False)
 
 
 class WidgetInput(Widget):
     def __init__(self,
                  text: str,
-                 size: Size = None,
-                 pos: Point = Point(0, 0),
+                 size: list[int, int] = None,
+                 pos: list[int, int] = [0, 0],
                  **kwargs
                  ):
         super().__init__(size, pos, **kwargs)
         # p = 1
-        self.size.h = 1
+        self.size[1] = 1
         self.text = text
         self.height = 1
         self.input = ""
@@ -253,7 +256,8 @@ class WidgetInput(Widget):
             Key.F11,
             Key.F12,
         ]
-        ignored_keys = [
+
+        control_keys = [
             Key.CR,
             Key.DOWN,
             Key.UP,
@@ -262,17 +266,16 @@ class WidgetInput(Widget):
             Key.END,
             Key.HOME,
             Key.ESC,
-            Key.ESC_2,
             Key.ENTER,
-            Key.ENTER_2,
             Key.INSERT,
             Key.LF,
             Key.PAGE_DOWN, 
             Key.PAGE_UP, 
             Key.SUPR,
+            Key.BACKSPACE,
         ]
 
-        self.__ignored_keys = ctrl_keys + funcion_keys + ignored_keys
+        self.__ignored_keys = ctrl_keys + funcion_keys + control_keys
 
     def run_callbacks(self):
         super().run_callbacks()
@@ -287,7 +290,7 @@ class WidgetInput(Widget):
 
     def get_max_length(self):
         p = 2
-        max_input_len = self.size.getWidth()-(p * 2)-len(self.text)
+        max_input_len = self.size[0] - (p * 2)- len(self.text)
         return max_input_len
 
     def update(self, key):
@@ -351,33 +354,38 @@ class WidgetInput(Widget):
         else:
             inp_ = inp[view:view+max_input_len-1] + " "
 
+        pointer_str = AStr(inp_[pointer-view])
+
         if not self.is_disabled and self.show_pointer or inp_[pointer-view] != " ":
-            pointer_str = CStr(
-                inp_[pointer-view], backcolor=(220, 220, 220), forecolor=(20, 20, 20))
-        else:
-            pointer_str = CStr(inp_[pointer-view])
+            #pointer_str = AStr(
+            #    inp_[pointer-view], back = (220, 220, 220), fore = (20, 20, 20))
+            pointer_str.add_graphics(AnsiGraphicMode.REVERSE)
+        #else:
+        #    pointer_str = AStr(inp_[pointer-view])
+        
         # insert the pointer into input text at the correct position
-        input_plus_pointer = CStr(
-            inp_[:pointer-view]) + pointer_str + CStr(inp_[pointer-view+1:])
+        input_plus_pointer = AStr(
+            inp_[:pointer-view]) + pointer_str + AStr(inp_[pointer-view+1:])
 
         text_c = (50, 200, 50)
 
-        fstr = CStr(text, forecolor=text_c)
+        title = AStr(text, fore=text_c)
 
-        back_exists = CStr("<", forecolor=text_c)
-        forward_exists = CStr(">", forecolor=text_c)
+        fstr = AStr("")
 
-        fstr += (back_exists if view != 0 else " ")
-        fstr += input_plus_pointer + " " * \
-            (max_input_len - len(input_plus_pointer))
-        fstr += (forward_exists if view+max_input_len-1 < len(inp) else " ")
+        back_exists = AStr("<", fore=text_c)
+        forward_exists = AStr(">", fore=text_c)
 
-        return fstr
+        fstr = fstr + (back_exists if view != 0 else AStr(" "))
+        fstr = fstr + input_plus_pointer + AStr(" " * (max_input_len - len(input_plus_pointer)))
+        fstr = fstr + (forward_exists if view+max_input_len-1 < len(inp) else AStr(" "))
+
+        fstr.add_graphics(AnsiGraphicMode.UNDERLINE)
+        return title + fstr
 
     def render(self):
         p = 1
         if self.parent.background_color is not None:
-            text_shadow = tuple(map(lambda x: x * 0.8, list(self.parent.background_color)))
-            self.drawer.place(CStr(" " * (self.size.getWidth() - (p * 2) - len(self.text)), backcolor=text_shadow), pos=(p + len(self.text), 0))
-        self.drawer.place(self.format_textbox(), pos=(p, 0))
-        #self.drawer.write_text(str(text_shadow), pos=(0, 0))
+            text_shadow = tuple(map(lambda x: round(x * 0.8), list(self.parent.background_color)))
+            self.drawer.place(AStr(" " * (self.size[0] - (p * 2) - len(self.text)), back=text_shadow), pos=(0, p + len(self.text)), assign = False)
+        self.drawer.place(self.format_textbox(), pos=(0, p), assign = False)
