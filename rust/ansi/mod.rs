@@ -79,8 +79,9 @@ pub enum ColorMode {
 }
 
 const ANSIRESET: &str = "\x1b[0m";
-const RESET_FOREGROUND: &str = "\x1b[0;39m";
-const RESET_BACKGROUND: &str = "\x1b[0;49m";
+//const RESET_FOREGROUND: &str = "\x1b[0;39m";
+//const RESET_BACKGROUND: &str = "\x1b[0;49m";
+
 bitflags! {
     #[pyclass]
     #[derive(Clone, Copy, PartialEq)]
