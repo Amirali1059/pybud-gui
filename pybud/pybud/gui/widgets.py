@@ -8,8 +8,6 @@ from pybud.drawer.color import ColorMode
 
 from readchar import key as Key
 
-DEFAULT_BACKGROUND_COLOR = (110, 90, 250)
-
 def default(d: dict, k:str, default):
     if k in d.keys():
         return d[k]
@@ -23,7 +21,7 @@ class WidgetBase():
         self.size = [6, 60] if size is None else size
         self.pos = [0, 0] if pos is None else pos
         # defaults
-        self.background_color = DEFAULT_BACKGROUND_COLOR
+        self.background_color = None
         self.name = default(kwargs, "name", "__name__")
         self.parent = None
         

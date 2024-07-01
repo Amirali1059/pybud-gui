@@ -15,8 +15,6 @@ except ModuleNotFoundError:
     print("Unable to find 'readchar' package, install it using `pip install readchar`")
     exit(1)
 
-DEFAULT_BACKGROUND_COLOR = (110, 90, 250)
-
 LAST_SHOWN_DRAWABLE = None
 # ticks per second
 TPS = 20
@@ -26,7 +24,7 @@ class Drawable():
         self.ctype = ColorMode.TRUECOLOR if ctype is None else ctype
         self.width = None
         self.height = None
-        self.background_color = DEFAULT_BACKGROUND_COLOR
+        self.background_color = None
         self.is_disabled = False
         self.closed = True
         self.drawer: Drawer = None
