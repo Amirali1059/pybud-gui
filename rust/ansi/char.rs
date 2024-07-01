@@ -1,13 +1,12 @@
 use pyo3::prelude::*;
 
-use std::collections::HashMap;
 use std::ops::Add;
 
 use super::string::AnsiString;
 use super::{AnsiColor, AnsiGraphics, ColorGround, ColorMode};
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct AnsiChar {
     #[pyo3(get, set)]
     pub char: char,

@@ -1,15 +1,14 @@
 use pyo3::prelude::*;
 
 use std::ops::Add;
-use std::str::FromStr;
 
-use crate::ansi::AnsiGraphics; // TODO: implement optimized rendering
+use crate::ansi::AnsiGraphics;
 
-use super::{AnsiColor, ColorGround, ColorMode, ANSIRESET, RESET_BACKGROUND, RESET_FOREGROUND};
+use super::{ColorGround, ColorMode, ANSIRESET};
 use super::char::AnsiChar;
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct AnsiString {
     #[pyo3(get, set)]
     pub vec: Vec<AnsiChar>,
@@ -19,17 +18,13 @@ fn min(a: usize, b: usize) -> usize {
     if a > b {b} else {a}
 }
 
-fn max(a: usize, b: usize) -> usize {
-    if a > b {a} else {b}
-}
-
 // non-python methods
 impl AnsiString {
     pub fn len(&self) -> usize {
         self.vec.len()
     }
 
-    // not optimized to_string, each character is rendered individually
+    // non-optimized to_string, each character is rendered individually
     pub fn to_string_noopt(&self, mode: &ColorMode) -> String {
         let mut _string = String::new();
         for ac in &self.vec.clone() {
@@ -60,14 +55,14 @@ impl AnsiString {
 impl AnsiString {
     #[new]
     #[inline]
-    pub fn new(str: &str, fore: Option<(u8, u8, u8)>, back: Option<(u8, u8, u8)>) -> AnsiString {
+    pub fn new(str: &str, fore: Option<(u8, u8, u8)>, back: Option<(u8, u8, u8)>) -> Self {
         let mut vec: Vec<AnsiChar> = Vec::with_capacity(str.len());
     
         for c in str.chars() {
             vec.push(AnsiChar::new(c, fore, back));
         }
 
-        AnsiString {vec: vec}
+        Self {vec: vec}
     }
 
     // optimized to_string
@@ -96,10 +91,12 @@ impl AnsiString {
 
             // if color is changed, apply changes
             if (pbc != cbc) || (pfc != cfc) {
-                // reset background
+                // reset ansi
+                _string.push_str(ANSIRESET);
+                /*// reset background
                 _string.push_str(RESET_BACKGROUND);
                 // reset foreground
-                _string.push_str(RESET_FOREGROUND);
+                _string.push_str(RESET_FOREGROUND);*/
                 
                 // set background if exists
                 _string.push_str(match cbc {
@@ -115,9 +112,7 @@ impl AnsiString {
 
                 // write current AnsiGraphics AGAIN
                 _string.push_str(cag.to_string(false).as_str());
-            }
-
-            if pag != cag {
+            } else if pag != cag {
                 // reset previus AnsiGraphics
                 _string.push_str(pag.to_string(true).as_str());
                 // write current AnsiGraphics
@@ -139,11 +134,17 @@ impl AnsiString {
         )
     }
 
+    pub fn cut_at(&self, end: usize) -> AnsiString{
+        let vecs = self.vec.split_at(end);
+        Self {vec: vecs.0.to_vec()}
+    }
+
     // main function for writing text
     pub fn place(&mut self, text: &AnsiString, pos: usize, assign: bool) {
         assert!(pos < self.len());
-
+        // starting index
         let si = pos;
+        // endiing index
         let ei = min(pos + text.len(), self.vec.len());
 
         for i in si..ei {
@@ -194,7 +195,7 @@ impl AnsiString {
     }
 
     // python operation add
-    pub fn __add__(&mut self, other: &Self) -> Self{
+    pub fn __add__(&mut self, other: &Self) -> Self {
         let mut r = self.clone();
         r.vec.append(&mut other.vec.clone());
 
@@ -207,8 +208,13 @@ impl AnsiString {
     }
 
     // python __str__ magic function
-    pub fn __str__(&self) -> String{
+    pub fn __str__(&self) -> String {
         self.to_string(&ColorMode::TRUECOLOR)
+    }
+
+    // python __eq__ magic function
+    pub fn __eq__(&self, other: &Self) -> bool {
+        self == other
     }
 }
 

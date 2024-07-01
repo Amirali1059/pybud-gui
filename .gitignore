@@ -17,3 +17,4 @@
 **/target
 # ignore all .whl files
 **/*.whl
+**/wheels

@@ -1,4 +1,3 @@
-#![allow(unused)]
 use std::time::{Duration, Instant};
 
 use ansi::char::AnsiChar;
@@ -29,7 +28,7 @@ fn test_render() -> String {
 #[pyfunction]
 fn test_render_100k() -> Duration{
     let now = Instant::now();
-    for i in 0..100000 {
+    for _ in 0..100000 {
         test_render();
     }
     now.elapsed()
@@ -56,8 +55,8 @@ fn _drawer(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ansi_module.add_class::<AnsiString>()?;
 
     m.add_class::<Drawer>()?;
-    m.add_submodule(&ansi_module);
-    m.add_submodule(&color_module);
+    m.add_submodule(&ansi_module).expect("Error on add_submodule! (ansi)");
+    m.add_submodule(&color_module).expect("Error on add_submodule! (color)");
 
     Ok(())
 }

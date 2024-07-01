@@ -1,7 +1,5 @@
 use pyo3::prelude::*;
 
-use crate::ansi;
-
 use crate::ansi::string::AnsiString;
 use crate::ansi::ColorMode;
 
@@ -30,9 +28,7 @@ impl Drawer {
     fn check_write_position(&self, pos: (usize, usize)) -> bool{
         //assert!(pos.0 <= self.size.height);
         //assert!(pos.1 <= self.size.width);
-
-        (pos.0 == self.size.height) || (pos.1 == self.size.width) ||
-        (pos.0 > self.size.height) || (pos.1 > self.size.width)
+        (pos.0 >= self.size.height) || (pos.1 >= self.size.width)
     }
 }
 
@@ -47,6 +43,7 @@ impl Drawer {
             None => {Self::DEFAULT_PLANE_COLOR}
             Some(c) => {c}
         };
+
         let mut plane: Vec<AnsiString> = Vec::with_capacity(size.0);
         for _ in 0..size.0 {
             plane.push(AnsiString::new_back(get_string_with_len(size.1).as_str(), default_or_given_plane_color));
@@ -63,8 +60,8 @@ impl Drawer {
 
     pub fn render(&self, mode: &ColorMode) -> String {
         assert!(self.plane.len() > 0);
-        let mut _render = String::with_capacity(self.size.width * self.size.width);
-        for p in self.plane.clone() {
+        let mut _render = String::with_capacity(self.size.width * self.size.height);
+        for p in &self.plane {
             _render.push_str((p.to_string(mode) + "\n").as_str())
         }
         _render
@@ -80,16 +77,16 @@ impl Drawer {
             return
         }
 
-        let mut _ansi_string = astr.clone();
-
-        let write_len = _ansi_string.len();
+        let write_len = astr.len();
         let end_idx = pos.1 + write_len;
 
         if end_idx > self.size.width {
-            _ansi_string = _ansi_string.split_at(write_len - (end_idx - self.size.width)).0;
+            let mut _ansi_string = astr.clone();
+            _ansi_string = _ansi_string.cut_at(write_len - (end_idx - self.size.width));
+            self.plane[pos.0].place(&_ansi_string, pos.1, assign);
+        } else {
+            self.plane[pos.0].place(&astr, pos.1, assign);
         }
-
-        self.plane[pos.0].place(&_ansi_string, pos.1, assign);
     }
 
     pub fn center_place(&mut self, astr: &AnsiString, ypos: usize, assign: bool) {
@@ -97,22 +94,21 @@ impl Drawer {
         self.place(astr, (ypos, xpos), assign);
     }
 
-    pub fn place_str(&mut self, str: &str, pos: (usize, usize)) {
+    pub fn place_str(&mut self, _str: &str, pos: (usize, usize)) {
         // checks if we can write, and if index is out of bounds, returns
         if self.check_write_position(pos) {
             return
         }
 
-        let mut _string = str.to_string();
-
-        let write_len = str.len();
+        let write_len = _str.len();
         let end_idx = pos.1 + write_len;
 
         if end_idx > self.size.width {
-            _string = _string.split_at(write_len - (end_idx - self.size.width)).0.to_string();
+            let _string = _str.split_at(write_len - (end_idx - self.size.width)).0;
+            self.plane[pos.0].place_str(_string, pos.1);
+        } else {
+            self.plane[pos.0].place_str(_str, pos.1);
         }
-
-        self.plane[pos.0].place_str(_string.as_str(), pos.1);
     }
 
     pub fn center_place_str(&mut self, str: &str, ypos: usize) {
@@ -125,26 +121,23 @@ impl Drawer {
             return
         }
 
-        for i in pos.0..self.plane.len() {
-            // reletive pos.0
-            let rp0 = i - pos.0;
+        for i in pos.0..self.size.height {
+            // reletive height
+            let rh: usize = i - pos.0;
 
-            if rp0 > (other.plane.len() - 1) {
+            if rh > (other.size.height - 1) {
                 break;
-            }  
+            }
+
             if border {
                 // other.plane's reletive line
-                let otprl = other.plane[i - pos.0].clone();
-                // border + otprl
-                let mut brl: AnsiString = otprl;
-                // vector length
-                let vl = brl.vec.len();
+                let mut otprl = other.plane[rh].clone();
 
-                for i in 0..vl{
-                    match brl.vec[i].back_color {
+                for i in 0..other.size.width{
+                    match otprl.vec[i].back_color {
                         None => {},
                         Some(bc) => {
-                            brl.vec[i].back_color = Some(AnsiColor {
+                            otprl.vec[i].back_color = Some(AnsiColor {
                             0: (bc.0 as f32 * 0.9) as u8,
                             1: (bc.1 as f32 * 0.9) as u8,
                             2: (bc.2 as f32 * 0.9) as u8,
@@ -152,10 +145,10 @@ impl Drawer {
                     }
                 }
 
-                self.plane[i].place(&brl, pos.1, false);
+                self.plane[i].place(&otprl, pos.1, false);
                 
             } else {
-                self.plane[i].place(&other.plane[i - pos.0], pos.1, false);
+                self.plane[i].place(&other.plane[rh], pos.1, false);
             }
             
         }

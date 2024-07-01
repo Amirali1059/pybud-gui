@@ -1,6 +1,5 @@
-#![allow(unused)]
 use pyo3::prelude::*;
-use bitflags::{bitflags, Flags};
+use bitflags::bitflags;
 
 pub mod char;
 pub mod string;
@@ -8,58 +7,49 @@ pub mod drawer;
 
 // Types
 #[pyclass]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct AnsiColor(pub u8, pub u8, pub u8);
 
-impl PartialEq for AnsiColor {
-    fn eq(&self, other: &Self) -> bool {
-        (self.0 == other.0) && (self.1 == other.1) && (self.2 == other.2)
-    }
-}
-
-fn calc_legacy_colorbit(c: u8) -> u8{
+fn calc_legacy_color(c: u8) -> u8 {
     /* 
-    legacy color usually ranges from about 48 to 236, 
+    legacy colors have an estimated range from about 48 to 236, 
     this function translates a single color to legacy base 6
     */
 
-    const K: f32 = 5.0 / 187.0; // constant ratio
+    // const K: f32 = 5.0 / 187.0; // constant ratio
     
-    if c >= 48 {
-        ((c-48) as f32 * K) as u8
-    } else {
-        0
-    }
+    if c >= 48 { ((c - 48) * 5) / 187 } else { 0 }
 }
 
 impl AnsiColor {
-    fn truecolor_render(&self, ground: &ColorGround) -> String {
-        let cmd = match ground {
+    #[inline]
+    fn get_ground_code(ground: &ColorGround) -> &str {
+        match ground {
             ColorGround::BACK => "48",
             ColorGround::FORE => "38",
-        };
-        format!("\x1b[{};2;{};{};{}m", cmd, self.0, self.1, self.2)
+        }
+    }
+
+    fn truecolor_render(&self, ground: &ColorGround) -> String {
+        format!("\x1b[{};2;{};{};{}m", Self::get_ground_code(ground), self.0, self.1, self.2)
     }
 
     fn limited_render(&self, ground: &ColorGround) -> String {
-        let cmd = match ground {
-            ColorGround::BACK => "48",
-            ColorGround::FORE => "38",
-        };
-        let r = calc_legacy_colorbit(self.0);
-        let g = calc_legacy_colorbit(self.1);
-        let b = calc_legacy_colorbit(self.2);
+        
+        let r = calc_legacy_color(self.0);
+        let g = calc_legacy_color(self.1);
+        let b = calc_legacy_color(self.2);
         let color_code = r * 36 + g * 6 + b + 16;
 
-        format!("\x1b[{};5;{}m", cmd, color_code)
+        format!("\x1b[{};5;{}m", Self::get_ground_code(ground), color_code)
     }
 }
 
 #[pymethods]
 impl AnsiColor {
     #[new]
-    fn new(r: u8, g: u8, b: u8) -> Self{
-        AnsiColor {0: r, 1: g, 2:b}
+    fn new(r: u8, g: u8, b: u8) -> Self {
+        Self {0: r, 1: g, 2:b}
     }
 
     pub fn to_string(&self, mode: &ColorMode, ground: &ColorGround) -> String {
@@ -138,7 +128,7 @@ impl AnsiGraphics {
             if i < Self::NAME2IDX.len(){
                 let mapping = Self::NAME2IDX[i];
                 if mapping.0 == name.to_uppercase() {
-                    break mapping.1 as i16
+                    break mapping.1 as i8
                 }
                 i += 1;
             } else {
@@ -155,7 +145,7 @@ impl AnsiGraphics {
 
         let graphic_ansi_codes = match Self::IDX2ANSI.get(idx) {
             None => {("", "")},
-            Some(t) => {t.clone()}
+            Some(t) => {*t}
         };
 
         match reset {
@@ -169,14 +159,14 @@ impl AnsiGraphics {
 impl AnsiGraphics {
     #[new]
     #[inline]
-    fn new() -> Self{
-        AnsiGraphics::empty()
+    fn new() -> Self {
+        Self::empty()
     }
 
     #[staticmethod]
     #[inline]
-    fn _from_bits(bits: u8) -> Option<AnsiGraphics>{
-        AnsiGraphics::from_bits(bits)
+    fn _from_bits(bits: u8) -> Option<Self> {
+        Self::from_bits(bits)
     }
 
     pub fn to_string(&self, reset: bool) -> String {
@@ -195,16 +185,12 @@ impl AnsiGraphics {
     }
 
     // python __eq__ magic function
-    pub fn __eq__(&self, other: &Self) -> bool{
+    pub fn __eq__(&self, other: &Self) -> bool {
         self == other
     }
 
     // python __or__ magic function
-    pub fn __or__(&self, other: &Self) -> Self{
-        let res = AnsiGraphics::from_bits(self.bits() | other.bits());
-        match res {
-            None => {AnsiGraphics::empty()}
-            Some(r) => {r}
-        }
+    pub fn __or__(&self, other: &Self) -> Self {
+        *self | *other
     }
 }
