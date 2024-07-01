@@ -9,14 +9,16 @@ version = "2.0.2"
 dependencies = [
   "readchar",
 ]
-requires-python = ">= 3.10"
+requires-python = ">= 3.9"
 authors = [
   {name = "Amirali Mollaei", email = "aam.products.mail@gmail.com"},
 ]
 description = "Create beautiful console GUIs in python, using Widgets, Dialogs, and more!"
 license = {text = "BSD 4-clause License"}
 classifiers = [
-    "Operating System :: OS Independent",
+    "Operating System :: Windows",
+    "Operating System :: Linux",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
