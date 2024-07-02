@@ -6,7 +6,7 @@ from pybud.drawer import Drawer
 from pybud.drawer.ansi import AnsiString as AStr
 from pybud.drawer.color import ColorMode
 #relative impotrs
-from .widgets import Widget
+from .widgets import WidgetBase
 # external imports
 try:
     from readchar import key as Key
@@ -105,7 +105,7 @@ class DialogBase(Drawable):
         super().__init__(ctype)
         self.width = width
         self.background_color = background_color
-        self.widgets: list[Widget] = []
+        self.widgets: list[WidgetBase] = []
         self.set_active_widget(0)
         self.result = None
         self.tick = 0
@@ -122,7 +122,7 @@ class DialogBase(Drawable):
         # set the height to one line more than the end of most buttom added dialog
         self.height = max_height + 1
 
-    def add_widget(self, w: Widget):
+    def add_widget(self, w: WidgetBase):
         w.on_add(self)
         w.background_color = self.background_color
         self.widgets.append(w)
@@ -194,11 +194,8 @@ class DialogBase(Drawable):
     def draw_widgets(self, drawer: Drawer):
         active_w = self.get_active_widget()
         for w in self.widgets:
-            
             border = w is active_w
-            w_render = w.get_render()
-            drawer.place_drawer(
-                w_render, (w.pos[1], w.pos[0]), border=border)
+            drawer.place_drawer(w.render(), (w.pos[1], w.pos[0]), border=border)
         return drawer
 
     def render(self):
