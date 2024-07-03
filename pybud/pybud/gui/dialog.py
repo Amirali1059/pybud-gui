@@ -6,7 +6,7 @@ from pybud.drawer import Drawer
 from pybud.drawer.ansi import AnsiString as AStr
 from pybud.drawer.color import ColorMode
 #relative impotrs
-from .widgets import Widget
+from .widgets import WidgetBase
 # external imports
 try:
     from readchar import key as Key
@@ -15,9 +15,6 @@ except ModuleNotFoundError:
     print("Unable to find 'readchar' package, install it using `pip install readchar`")
     exit(1)
 
-DEFAULT_BACKGROUND_COLOR = (110, 90, 250)
-
-LAST_SHOWN_DRAWABLE = None
 # ticks per second
 TPS = 20
 
@@ -26,20 +23,38 @@ class Drawable():
         self.ctype = ColorMode.TRUECOLOR if ctype is None else ctype
         self.width = None
         self.height = None
-        self.background_color = DEFAULT_BACKGROUND_COLOR
+        self.background_color = None
         self.is_disabled = False
         self.closed = True
         self.drawer: Drawer = None
         self.drawing = False
+        self.tick = 0
         # self.last_update = 0
         self.tickupdate_thread: Thread = None
         self.tickupdate_started = False
         self.tick_memory = []
 
-    def onClose(self):
-        self.close()
+        # holds all callbacks
+        self._callbacks = {
+            "on_draw": [],
+            "on_close": [],
+            "on_update": [],
+        }
+
+    def assert_callback_id(self, calllback_id):
+        assert calllback_id in self._callbacks.keys(), f"callback_id=\"{calllback_id}\" does not exist, available options: {list(self._callbacks.keys())}"
+
+    def add_callback(self, calllback_id: str, fn):
+        self.assert_callback_id(calllback_id)
+        self._callbacks[calllback_id].append(fn)
+
+    def _run_callback(self, calllback_id: str, **kwargs):
+        self.assert_callback_id(calllback_id)
+        return [fn(**kwargs) for fn in self._callbacks[calllback_id]]
 
     def close(self):
+        self._run_callback("on_close")
+
         self.closed = True
         while self.tickupdate_thread.is_alive():
             time.sleep(0.01)
@@ -51,12 +66,16 @@ class Drawable():
 
     def update(self, key: str):
         if key == Key.CTRL_C:
-            self.onClose()
+            self.close()
         if key == Key.ESC:
-            self.onClose()
+            self.close()
+        if key == "UPDATE":
+            self.tick += 1
+        self._run_callback("on_update", key = key)
+        self.draw()
         return key
 
-    def doTickUpdates(self):
+    def do_tick_updates(self):
         while not self.closed:
             # records the delay caused by an update and subtracts
             # that from tick waiting time.  
@@ -70,7 +89,7 @@ class Drawable():
 
             time.sleep(max(0, frame_time))
 
-    def doKeyUpdates(self):
+    def do_key_updates(self):
         while not self.closed:
             try:
                 key = readkey()
@@ -79,27 +98,26 @@ class Drawable():
             self.update(key)
 
     def show(self):
-        global LAST_SHOWN_DRAWABLE
-        LAST_SHOWN_DRAWABLE = self
-
         self.closed = False
 
         print("\n" * self.height, end="")
         self.draw()
 
         if not self.tickupdate_started:
-            self.tickupdate_thread = Thread(target=self.doTickUpdates)
+            self.tickupdate_thread = Thread(target=self.do_tick_updates)
             self.tickupdate_thread.start()
             self.tickupdate_started = True
-        self.doKeyUpdates()
-
-    def get_drawer(self):
-        return Drawer(size=(self.height, self.width), plane_color=self.background_color)
+        self.do_key_updates()
 
     def draw(self):
+        drawer = Drawer(size=(self.height, self.width), plane_color=self.background_color)
         if not self.closed:
             self.drawing = True
-            self.drawer = self.get_drawer()
+            self._run_callback("on_draw", drawer = drawer)
+            self.drawing = False
+        print(f"\033[{self.height}F", end="")
+        print(drawer.render(self.ctype), end="")
+        self.last_draw_time = time.time()
 
 
 class DialogBase(Drawable):
@@ -107,12 +125,15 @@ class DialogBase(Drawable):
         super().__init__(ctype)
         self.width = width
         self.background_color = background_color
-        self.widgets: list[Widget] = []
+        self.widgets: list[WidgetBase] = []
         self.set_active_widget(0)
         self.result = None
         self.tick = 0
         self.totw = 0
         self.last_draw_time = time.time()
+
+        self.add_callback("on_update", self._on_update)
+        self.add_callback("on_draw", self.draw_widgets)
 
     def update_height(self):
         max_height = 0
@@ -124,7 +145,7 @@ class DialogBase(Drawable):
         # set the height to one line more than the end of most buttom added dialog
         self.height = max_height + 1
 
-    def add_widget(self, w: Widget):
+    def add_widget(self, w: WidgetBase):
         w.on_add(self)
         w.background_color = self.background_color
         self.widgets.append(w)
@@ -139,15 +160,12 @@ class DialogBase(Drawable):
                 i += 1
         return i
 
-    def get_active_widget(self, return_i: bool = False):
+    def get_active_widget(self):
         i = 0
         w = None
 
         if self.totw == 0:
-            if return_i:
-                return w, i
-            else:
-                return w
+            return w, i
         
         for w in self.widgets:
             if not w.selectable:
@@ -157,10 +175,7 @@ class DialogBase(Drawable):
                 continue
             break
 
-        if return_i:
-            return w, i
-        else:
-            return w
+        return w, i
 
     def set_active_widget(self, __i: int):
         i = 0
@@ -174,49 +189,22 @@ class DialogBase(Drawable):
                 w.is_disabled = True
             i += 1
 
-    def update(self, key, draw=True):
-        key = super().update(key)
-
-        w, i = self.get_active_widget(True)
+    def _on_update(self, key):
+        w, i = self.get_active_widget()
         if w is not None:
             key = w.update(key)
             self.result = w.result
 
         if key == Key.TAB:
             self.set_active_widget((i + 1) % self.totw)
-
-        if key == "UPDATE":
-            self.tick += 1
-
-        if draw and key == "UPDATE":
-            self.draw()
-        else:
-            return key
+        
+        return key
 
     def draw_widgets(self, drawer: Drawer):
-        active_w = self.get_active_widget()
+        active_w, _ = self.get_active_widget()
         for w in self.widgets:
-            
             border = w is active_w
-            w_render = w.get_render()
-            drawer.place_drawer(
-                w_render, (w.pos[1], w.pos[0]), border=border)
-        return drawer
-
-    def render(self):
-        self.drawer = self.draw_widgets(self.drawer)
-
-    def draw(self):
-        if self.closed or self.drawing:
-            return
-        super().draw()
-        self.render()
-
-        print(f"\033[{self.height}F", end="")
-        print(self.drawer.render(self.ctype), end="")
-        # time.sleep(0.01)
-        self.drawing = False
-        self.last_draw_time = time.time()
+            drawer.place_drawer(w.render(), (w.pos[1], w.pos[0]), border=border)
 
     def show(self):
         super().show()
@@ -236,52 +224,46 @@ class AutoDialog(DialogBase):
         self.mode = mode.lower()
         self.background_color = background_color
 
-    def update(self, key):
-        key = super().update(key, draw=False)
+        self.add_callback("on_draw", self._on_draw_auto)
+
+    def _on_update(self, key):
+        key = super()._on_update(key)
+
         if key == None:
-            self.draw()
             return
 
-        if self.totw != 0:
-            w, i = self.get_active_widget(True)
-            av = i
-            if self.mode == "v":
-                if key == Key.UP:
-                    av = (i - 1) % self.totw 
-                elif key == Key.DOWN:
-                    av = (i + 1) % self.totw
-            elif self.mode == "iv":
-                if key == Key.DOWN:
-                    av = (i + 1) % self.totw
-                elif key == Key.UP:
-                    av = (i + 1) % self.totw
-            elif self.mode == "h":
-                if key == Key.LEFT:
-                    av = (i - 1) % self.totw
-                elif key == Key.RIGHT:
-                    av = (i + 1) % self.totw
-            elif self.mode == "ih":
-                if key == Key.RIGHT:
-                    av = (i + 1) % self.totw
-                elif key == Key.LEFT:
-                    av = (i - 1) % self.totw
-            else:
-                raise ValueError(f"Unknown mode \"{self.mode}\"!")
-            self.set_active_widget(av)
-        
-        # draw after each update
-        self.draw()
+        if self.totw == 0:
+            return
 
-    def render(self):
-        super().render()
-        animation = "▁▂▃▄▅▆▆▅▄▃▂▁▂ "
+        w, i = self.get_active_widget()
+        av = i
+        if self.mode == "v":
+            if key == Key.UP:
+                av = (i - 1) % self.totw 
+            elif key == Key.DOWN:
+                av = (i + 1) % self.totw
+        elif self.mode == "iv":
+            if key == Key.DOWN:
+                av = (i + 1) % self.totw
+            elif key == Key.UP:
+                av = (i + 1) % self.totw
+        elif self.mode == "h":
+            if key == Key.LEFT:
+                av = (i - 1) % self.totw
+            elif key == Key.RIGHT:
+                av = (i + 1) % self.totw
+        elif self.mode == "ih":
+            if key == Key.RIGHT:
+                av = (i + 1) % self.totw
+            elif key == Key.LEFT:
+                av = (i - 1) % self.totw
+        else:
+            raise ValueError(f"Unknown mode \"{self.mode}\"!")
+        self.set_active_widget(av)
 
-        def get_admination(tick, n=3):
+    def _on_draw_auto(self, drawer: Drawer):
+        def get_admination(tick, n = 3, animation = "▁▂▃▄▅▆▆▅▄▃▂▁▂ "):
             rt = tick
             return animation[rt % (len(animation)-n):rt % (len(animation)-n)+n]
             #return round(1 / (time.time() - self.last_draw_time)).__str__()
-        self.drawer.place(AStr(get_admination(self.tick)), pos=(0, 1), assign = False)
-
-    def show(self):
-        super().show()
-        return self.result
+        drawer.place(AStr(get_admination(self.tick)), pos=(0, 1), assign = False)

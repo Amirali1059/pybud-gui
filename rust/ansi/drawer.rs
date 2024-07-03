@@ -35,18 +35,15 @@ impl Drawer {
 // python methods
 #[pymethods]
 impl Drawer {
-    const DEFAULT_PLANE_COLOR: (u8, u8, u8) = (110, 90, 250);
     #[new]
     #[inline]
     pub fn new(size: (usize, usize), plane_color: Option<(u8, u8, u8)>) -> Drawer {
-        let default_or_given_plane_color = match plane_color {
-            None => {Self::DEFAULT_PLANE_COLOR}
-            Some(c) => {c}
-        };
-
         let mut plane: Vec<AnsiString> = Vec::with_capacity(size.0);
         for _ in 0..size.0 {
-            plane.push(AnsiString::new_back(get_string_with_len(size.1).as_str(), default_or_given_plane_color));
+            plane.push(match plane_color {
+                None => {AnsiString::new_colorless(get_string_with_len(size.1).as_str())}
+                Some(color) => {AnsiString::new_back(get_string_with_len(size.1).as_str(), color)}
+            });
         }
         
         Drawer {

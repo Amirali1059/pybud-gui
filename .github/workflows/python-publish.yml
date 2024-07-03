@@ -20,11 +20,9 @@ jobs:
           { os: "macos-latest", python-architecture: "arm64", rust-target: "aarch64-apple-darwin" },
           { os: "ubuntu-latest", python-architecture: "x64", rust-target: "x86_64-unknown-linux-gnu" },
           { os: "windows-latest", python-architecture: "x64", rust-target: "x86_64-pc-windows-msvc" },
+          { os: "windows-latest", python-architecture: "x86", rust-target: "i686-pc-windows-msvc" },
         ]
         include:
-          # Just test one x86 Windows Python for simplicity
-          - python-version: 3.12
-            platform: { os: "windows-latest", python-architecture: "x86", rust-target: "i686-pc-windows-msvc" }
           # Just test one x64 macOS Python for simplicity
           - python-version: 3.12
             platform: { os: "macos-13", python-architecture: "x64", rust-target: "x86_64-apple-darwin" }
@@ -81,11 +79,9 @@ jobs:
           { os: "macos-latest", python-architecture: "arm64", rust-target: "aarch64-apple-darwin" },
           { os: "ubuntu-latest", python-architecture: "x64", rust-target: "x86_64-unknown-linux-gnu" },
           { os: "windows-latest", python-architecture: "x64", rust-target: "x86_64-pc-windows-msvc" },
+          { os: "windows-latest", python-architecture: "x86", rust-target: "i686-pc-windows-msvc" },
         ]
         include:
-          # Just test one x86 Windows Python for simplicity
-          - python-version: 3.12
-            platform: { os: "windows-latest", python-architecture: "x86", rust-target: "i686-pc-windows-msvc" }
           # Just test one x64 macOS Python for simplicity
           - python-version: 3.12
             platform: { os: "macos-13", python-architecture: "x64", rust-target: "x86_64-apple-darwin" }

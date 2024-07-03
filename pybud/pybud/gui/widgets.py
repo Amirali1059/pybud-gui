@@ -8,8 +8,6 @@ from pybud.drawer.color import ColorMode
 
 from readchar import key as Key
 
-DEFAULT_BACKGROUND_COLOR = (110, 90, 250)
-
 def default(d: dict, k:str, default):
     if k in d.keys():
         return d[k]
@@ -23,11 +21,29 @@ class WidgetBase():
         self.size = [6, 60] if size is None else size
         self.pos = [0, 0] if pos is None else pos
         # defaults
-        self.background_color = DEFAULT_BACKGROUND_COLOR
+        self.background_color = None
         self.name = default(kwargs, "name", "__name__")
         self.parent = None
+        self.is_selected = False
+        self.selectable = False
         
-        self.result = None
+        # holds all callbacks
+        self._callbacks = {
+            "on_parent_change": [],
+            "on_add": [],
+            "on_render": [],
+            "on_interrupt": [],
+            "on_enter": [],
+            "on_update": [],
+        }
+
+    def add_callback(self, calllback_id: str, fn):
+        assert calllback_id in self._callbacks.keys(), f"callback_id=\"{calllback_id}\" does not exist, available options: {list(self._callbacks.keys())}"
+        self._callbacks[calllback_id].append(fn)
+
+    def _run_callback(self, calllback_id: str, **kwargs):
+        assert calllback_id in self._callbacks.keys(), f"callback_id=\"{calllback_id}\" does not exist, available options: {list(self._callbacks.keys())}"
+        return [fn(**kwargs) for fn in self._callbacks[calllback_id]]
 
     def get_name(self):
         name = self.__class__.__name__
@@ -37,57 +53,41 @@ class WidgetBase():
                 c += 1
         return name + "_" + str(c+1)
 
-    
     def on_add(self, parent):
+        self._run_callback("on_add", parent = parent)
+        if self.parent == parent: return
         self.parent = parent
         if self.name == "__name__":
             self.name = self.get_name()
+        self._run_callback("on_parent_change")
 
     def on_interrupt(self):
-        pass
-
-    def get_drawer(self):
-        return Drawer(size=tuple(self.size[::-1]), plane_color=self.background_color)
+        self._run_callback("on_interrupt")
 
     def render(self):
-        pass
-
-    def get_render(self):
-        self.drawer = self.get_drawer()
-        self.render()
-        return self.drawer
+        drawer = Drawer(size=tuple(self.size[::-1]), plane_color=self.background_color)
+        self._run_callback("on_render", drawer = drawer)
+        return drawer
 
     def update(self, key):
+        self._run_callback("on_update", key = key)
+        if key == Key.ENTER:
+            self._run_callback("on_enter")
         return key
 
-
-class Widget(WidgetBase):
+class InteractableWidget(WidgetBase):
     def __init__(self, size: list[int, int] = None, pos: list[int, int] = [0, 0], **kwargs):
         super().__init__(size, pos, **kwargs)
         # defaults
         self.is_disabled = False
-        self.is_selected = False
         self.selectable = True
-
-    def run_callbacks(self):
-        pass
-
-    def on_enter(self):
-        return self.run_callbacks()
+        self.result = None
 
     def on_interrupt(self):
         super().on_interrupt()
         self.is_disabled = True
 
-    def update(self, key):
-        key = super().update(key)
-        if key == Key.ENTER:
-            self.on_enter()
-            return
-        return key
-
-
-class WidgetLabel(Widget):
+class WidgetLabel(WidgetBase):
     def __init__(self,
                  text,
                  centered: bool = True,
@@ -111,40 +111,38 @@ class WidgetLabel(Widget):
         self.size[1] = (len(text) // (self.size[0] - (2*self.pad))) + 1
         self.centered = centered
         self.wordwrap = wordwrap
-        self.selectable = False
 
-    def run_callbacks(self):
-        pass
+        self.add_callback("on_render", self.on_render)
 
-    def _place_text(self, text, ypos):
-        if self.centered:
-            self.drawer.center_place(text, ypos = ypos, assign = False)
-        else:
-            self.drawer.place(text, pos=(ypos, 0), assign = False)
+    def place_text(self, drawer, text, ln_idx):
+        def _place_text(t, ypos):
+            if self.centered:
+                drawer.center_place(t, ypos = ypos, assign = False)
+            else:
+                drawer.place(t, pos=(ypos, 0), assign = False)
 
-    def place_text(self, t, ln_idx):
         p = 2*self.pad
 
-        if len(t) > (self.size[0] - p):
-            for i in range(len(t)):
-                i_ = len(t) - i - 1
+        if len(text) > (self.size[0] - p):
+            for i in range(len(text)):
+                i_ = len(text) - i - 1
                 if i_ > (self.size[0] - p):
                     continue
-                if isinstance(t, str) and t[i_] == " ":
-                    self._place_text(t[:i_], ln_idx)
-                    return self.place_text(t[i_+1:], ln_idx + 1)
-                if isinstance(t, AStr) and t.vec[i_].char == " ":
-                    t_0, t_1 = t.split_at(i_)
-                    self._place_text(t_0, ln_idx)
-                    return self.place_text(t_1, ln_idx + 1)
+                if isinstance(text, str) and text[i_] == " ":
+                    _place_text(text[:i_], ln_idx)
+                    return self.place_text(drawer, text[i_+1:], ln_idx + 1)
+                if isinstance(text, AStr) and text.vec[i_].char == " ":
+                    t_0, t_1 = text.split_at(i_)
+                    _place_text(t_0, ln_idx)
+                    return self.place_text(drawer, t_1, ln_idx + 1)
         else:
-            self._place_text(t, ln_idx)
+            _place_text(text, ln_idx)
 
-    def render(self):
-        self.place_text(self.text, ln_idx=0)
+    def on_render(self, drawer: Drawer):
+        self.place_text(drawer, self.text, ln_idx = 0)
 
 
-class WidgetOptions(Widget):
+class WidgetOptions(InteractableWidget):
     def __init__(self,
                  options: list[tuple[str, types.FunctionType]],
                  text: str = "Options:",
@@ -162,24 +160,41 @@ class WidgetOptions(Widget):
         self.selected = default_option
         self.size[1] = 1 + self.n_options
 
-    def run_callbacks(self):
+        self._callbacks.update({
+            "on_keyboard_up": [],
+            "on_keyboard_down": [],
+        })
+
+        self.add_callback("on_keyboard_up", self.on_keyboard_up)
+        self.add_callback("on_keyboard_down", self.on_keyboard_down)
+
+        self.add_callback("on_render", self.on_render)
+        self.add_callback("on_enter", self.on_enter)
+
+    def on_enter(self):
         self.result = self.callbacks[self.selected](self.parent)
         return self.result
+
+    def on_keyboard_up(self):
+        self.selected = (self.selected - 1) % self.n_options
+
+    def on_keyboard_down(self):
+        self.selected = (self.selected + 1) % self.n_options
 
     def update(self, key):
         key = super().update(key)
         if key == Key.UP:
-            self.selected = (self.selected - 1) % self.n_options
+            self._run_callback("on_keyboard_up")
             return
         if key == Key.DOWN:
-            self.selected = (self.selected + 1) % self.n_options
+            self._run_callback("on_keyboard_down")
             return
         return key
 
-    def render(self):
+    def on_render(self, drawer: Drawer):
         caption_start = 2
         __options = self.text.ljust(self.size[0] - caption_start)
-        self.drawer.place(AStr(__options, fore=(220, 220, 220)), pos=(0, caption_start), assign = False)
+        drawer.place(AStr(__options, fore = (220, 220, 220)), pos = (0, caption_start), assign = False)
         for i, option in enumerate(self.options):
             if i == self.selected:
                 option_color = (50, 220, 80)
@@ -188,16 +203,17 @@ class WidgetOptions(Widget):
                 option_color = (220, 220, 220)
                 option_indicator = AStr("  ", fore=(220, 220, 220))
             __option = AStr(option, fore=option_color)
-            self.drawer.place(option_indicator + __option, pos=(i + 1, caption_start), assign = False)
+            drawer.place(option_indicator + __option, pos=(i + 1, caption_start), assign = False)
 
 
-class WidgetInput(Widget):
+class WidgetInput(InteractableWidget):
     def __init__(self,
                  text: str,
                  size: list[int, int] = None,
                  pos: list[int, int] = [0, 0],
                  **kwargs
                  ):
+
         super().__init__(size, pos, **kwargs)
         # p = 1
         self.size[1] = 1
@@ -210,7 +226,6 @@ class WidgetInput(Widget):
 
         # characters that this dialouge will listen to
         self.allowed_characters = default(kwargs, "allowed_chars", "")
-        
 
         ## keys
         ctrl_keys = [
@@ -241,7 +256,7 @@ class WidgetInput(Widget):
             Key.CTRL_Y,
             Key.CTRL_Z,
         ]
-        
+
         funcion_keys = [
             Key.F1,
             Key.F2,
@@ -257,8 +272,7 @@ class WidgetInput(Widget):
             Key.F12,
         ]
 
-        control_keys = [
-            Key.CR,
+        command_keys = [
             Key.DOWN,
             Key.UP,
             Key.LEFT,
@@ -269,16 +283,19 @@ class WidgetInput(Widget):
             Key.ENTER,
             Key.INSERT,
             Key.LF,
-            Key.PAGE_DOWN, 
-            Key.PAGE_UP, 
+            Key.CR,
+            Key.PAGE_DOWN,
+            Key.PAGE_UP,
             Key.SUPR,
             Key.BACKSPACE,
         ]
 
-        self.__ignored_keys = ctrl_keys + funcion_keys + control_keys
+        self.__ignored_keys = ctrl_keys + funcion_keys + command_keys
 
-    def run_callbacks(self):
-        super().run_callbacks()
+        self.add_callback("on_render", self.on_render)
+        self.add_callback("on_enter", self.on_enter)
+
+    def on_enter(self):
         self.parent.close()
         self.result = self.input
         return self.result
@@ -311,19 +328,17 @@ class WidgetInput(Widget):
         # backspace
         if key == Key.BACKSPACE:
             if self.pointer != 0:
-                self.input = self.input[:self.pointer -
-                                        1] + self.input[self.pointer:]
+                self.input = self.input[:self.pointer-1] + self.input[self.pointer:]
             else:
                 self.input = self.input[self.pointer:]
-            self.pointer = max(self.pointer - 1, 0)
+            self.pointer = max(self.pointer-1, 0)
             if self.pointer-self.view < 0:
                 self.view = max(self.view - max_input_len, 0)
             return
 
         # delete
         if key == Key.DELETE:
-            self.input = self.input[:self.pointer] + \
-                self.input[self.pointer+1:]
+            self.input = self.input[:self.pointer] + self.input[self.pointer+1:]
             # self.pointer = max(self.pointer - 1, 0)
             return
 
@@ -364,15 +379,12 @@ class WidgetInput(Widget):
         #    pointer_str = AStr(inp_[pointer-view])
         
         # insert the pointer into input text at the correct position
-        input_plus_pointer = AStr(
-            inp_[:pointer-view]) + pointer_str + AStr(inp_[pointer-view+1:])
+        input_plus_pointer = AStr( inp_[:pointer-view]) + pointer_str + AStr(inp_[pointer-view+1:])
 
         text_c = (50, 200, 50)
 
         title = AStr(text, fore=text_c)
-
         fstr = AStr("")
-
         back_exists = AStr("<", fore=text_c)
         forward_exists = AStr(">", fore=text_c)
 
@@ -383,9 +395,9 @@ class WidgetInput(Widget):
         fstr.add_graphics(AnsiGraphicMode.UNDERLINE)
         return title + fstr
 
-    def render(self):
+    def on_render(self, drawer: Drawer):
         p = 1
         if self.parent.background_color is not None:
             text_shadow = tuple(map(lambda x: round(x * 0.8), list(self.parent.background_color)))
-            self.drawer.place(AStr(" " * (self.size[0] - (p * 2) - len(self.text)), back=text_shadow), pos=(0, p + len(self.text)), assign = False)
-        self.drawer.place(self.format_textbox(), pos=(0, p), assign = False)
+            drawer.place(AStr(" " * (self.size[0] - (p * 2) - len(self.text)), back=text_shadow), pos=(0, p + len(self.text)), assign = False)
+        drawer.place(self.format_textbox(), pos=(0, p), assign = False)
