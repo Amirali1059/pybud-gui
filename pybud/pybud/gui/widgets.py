@@ -33,6 +33,7 @@ class WidgetBase():
             "on_add": [],
             "on_render": [],
             "on_interrupt": [],
+            "on_enter": [],
             "on_update": [],
         }
 
@@ -70,8 +71,9 @@ class WidgetBase():
 
     def update(self, key):
         self._run_callback("on_update", key = key)
+        if key == Key.ENTER:
+            self._run_callback("on_enter")
         return key
-
 
 class InteractableWidget(WidgetBase):
     def __init__(self, size: list[int, int] = None, pos: list[int, int] = [0, 0], **kwargs):
@@ -81,20 +83,9 @@ class InteractableWidget(WidgetBase):
         self.selectable = True
         self.result = None
 
-        self._callbacks.update({
-            "on_enter": [],
-        })
-
     def on_interrupt(self):
         super().on_interrupt()
         self.is_disabled = True
-
-    def update(self, key):
-        key = super().update(key)
-        if key == Key.ENTER:
-            self._run_callback("on_enter")
-            return
-        return key
 
 class WidgetLabel(WidgetBase):
     def __init__(self,
