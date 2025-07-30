@@ -1,193 +1,291 @@
 use pyo3::prelude::*;
 
-use crate::ansi::string::AnsiString;
-use crate::ansi::ColorMode;
-
 use super::AnsiColor;
+use crate::ansi::char::AnsiChar;
+use crate::ansi::string::AnsiString;
+use crate::ansi::{AnsiGraphics, ColorGround, ColorMode, ANSIRESET};
 
-#[derive(Clone, Copy)]
-struct Size {
-    height: usize,
-    width: usize
-}
-
-#[derive(Clone)]
 #[pyclass]
-pub struct Drawer {
-    size: Size,
-    #[pyo3(get, set)]
-    plane: Vec<AnsiString>,
-    #[pyo3(get, set)]
-    plane_color: Option<(u8, u8, u8)>,
+#[derive(Clone)]
+pub struct Plane {
+    width: usize,
+    height: usize,
+    content: Vec<Vec<AnsiChar>>,
 }
 
-fn get_string_with_len(len: usize) -> String {
-    " ".repeat(len).to_string()
-}
-
-fn get_char_with_len(char: char, len: usize) -> String {
-    char.to_string().repeat(len).to_string()
-}
-
-// non-python methods
-impl Drawer {
-    fn check_write_position(&self, pos: (usize, usize)) -> bool{
-        //assert!(pos.0 <= self.size.height);
-        //assert!(pos.1 <= self.size.width);
-        (pos.0 >= self.size.height) || (pos.1 >= self.size.width)
+impl Plane {
+    #[inline]
+    fn assert_write_position(&self, posx: usize, posy: usize) -> bool {
+        posy < self.height && posx < self.width
     }
-}
 
-fn make_empty_plane(height: usize, width: usize, color: Option<(u8, u8, u8)>) ->  Vec<AnsiString> {
-    let mut plane: Vec<AnsiString> = Vec::with_capacity(height);
-    for _ in 0..height {
-        let blank_str = get_string_with_len(width);
-        plane.push(match color {
-            None => {AnsiString::new_colorless(blank_str.as_str())}
-            Some(color) => {AnsiString::new_back(blank_str.as_str(), color)}
-        });
+    #[inline(always)]
+    pub fn set_char(&mut self, c: char, posx: usize, posy: usize) {
+        if !self.assert_write_position(posx, posy) {
+            return;
+        }
+        // Use unsafe to avoid double bounds checking
+        unsafe {
+            self.content
+                .get_unchecked_mut(posy)
+                .get_unchecked_mut(posx)
+                .char = c;
+        }
     }
-    plane
+
+    #[inline(always)]
+    pub fn assign(&mut self, achar: &AnsiChar, posx: usize, posy: usize) {
+        if !self.assert_write_position(posx, posy) {
+            return;
+        }
+        // Use unsafe to avoid double bounds checking
+        unsafe {
+            let cell = self.content.get_unchecked_mut(posy).get_unchecked_mut(posx);
+            cell.char = achar.char;
+            cell.fore_color = achar.fore_color;
+            if achar.back_color.is_some() {
+                cell.back_color = achar.back_color;
+            }
+            cell.graphics = achar.graphics;
+        }
+    }
 }
 
 // python methods
 #[pymethods]
-impl Drawer {
+impl Plane {
+    #[new]
+    #[pyo3(signature = (width, height, color=None))]
+    #[inline]
+    pub fn new(width: usize, height: usize, color: Option<AnsiColor>) -> Plane {
+        let achar = AnsiChar::new_colored(' ', None, color);
+        Plane {
+            width: width,
+            height: height,
+            content: vec![vec![achar; width]; height],
+        }
+    }
+}
+
+#[derive(Clone)]
+#[pyclass]
+pub struct DrawerFast {
+    plane: Plane,
+}
+
+// python methods
+#[pymethods]
+impl DrawerFast {
     #[new]
     #[pyo3(signature = (width, height, plane_color=None))]
     #[inline]
-    pub fn new(width: usize, height: usize, plane_color: Option<(u8, u8, u8)>) -> Drawer {
-        Drawer {
-            size: Size {
-                width: width,
-                height: height,
-            },
-            plane: make_empty_plane(height, width, plane_color),
-            plane_color: plane_color
+    pub fn new(width: usize, height: usize, plane_color: Option<AnsiColor>) -> DrawerFast {
+        DrawerFast {
+            plane: Plane::new(width, height, plane_color),
         }
     }
 
     #[pyo3(signature = (color=None))]
-    pub fn fill(&mut self, color: Option<(u8, u8, u8)>) {
-        self.plane = make_empty_plane(self.size.height, self.size.width, color)
+    pub fn fill(&mut self, color: Option<AnsiColor>) {
+        let achar = AnsiChar::new_colored(' ', None, color);
+        self.plane.content = vec![vec![achar; self.plane.width]; self.plane.height];
     }
 
-    pub fn clear(&mut self) {
-        self.plane = make_empty_plane(self.size.height, self.size.width, self.plane_color)
+    #[getter]
+    pub fn height(&self) -> usize {
+        self.plane.height
     }
 
-    pub fn render(&self, mode: &ColorMode) -> String {
-        assert!(self.plane.len() > 0);
-        let mut _render = String::with_capacity(self.size.width * self.size.height);
-        for p in &self.plane {
-            _render.push_str((p.to_string(mode) + "\n").as_str())
-        }
-        _render
+    #[getter]
+    pub fn width(&self) -> usize {
+        self.plane.width
     }
 
-    // python __str__ magic function
-    pub fn __str__(&self) -> String{
-        self.render(&ColorMode::TRUECOLOR)
-    }
+    pub fn render(&self, mode: Option<ColorMode>) -> String {
+        let colormode = &mode.unwrap_or(ColorMode::TRUECOLOR);
 
-    pub fn place(&mut self, astr: &AnsiString, pos: (usize, usize), assign: bool) {
-        if self.check_write_position(pos) {
-            return
-        }
+        // the minimum size of the final result is width * height
+        let mut result: String = String::with_capacity(self.plane.width * self.plane.height * 4);
 
-        let write_len = astr.len();
-        let end_idx = pos.1 + write_len;
+        for i in 0..self.plane.height {
+            // Track cursor states for each line
+            let mut current_background_color: Option<AnsiColor> = None;
+            let mut current_foreground_color: Option<AnsiColor> = None;
+            let mut current_graphics_state: AnsiGraphics = AnsiGraphics::empty();
 
-        if end_idx > self.size.width {
-            let mut _ansi_string = astr.clone();
-            _ansi_string = _ansi_string.cut_at(write_len - (end_idx - self.size.width));
-            self.plane[pos.0].place(&_ansi_string, pos.1, assign);
-        } else {
-            self.plane[pos.0].place(&astr, pos.1, assign);
-        }
-    }
+            unsafe {
+                for achar in self.plane.content.get_unchecked(i) {
+                    let need_update = current_background_color != achar.back_color
+                        || current_foreground_color != achar.fore_color
+                        || current_graphics_state != achar.graphics;
 
-    pub fn center_place(&mut self, astr: &AnsiString, ypos: usize, assign: bool) {
-        let xpos: usize = (self.size.width - astr.len()) / 2;
-        self.place(astr, (ypos, xpos), assign);
-    }
+                    if need_update {
+                        if current_background_color.is_some()
+                            || current_foreground_color.is_some()
+                            || !current_graphics_state.is_empty()
+                        {
+                            result += &ANSIRESET;
+                        }
+                        // set background color
+                        if let Some(c) = achar.back_color {
+                            result += &c.to_string(colormode, &ColorGround::BACK);
+                        }
 
-    pub fn place_str(&mut self, _str: &str, pos: (usize, usize)) {
-        // checks if we can write, and if index is out of bounds, returns
-        if self.check_write_position(pos) {
-            return
-        }
+                        // set foreground color
+                        if let Some(c) = achar.fore_color {
+                            result += &c.to_string(colormode, &ColorGround::FORE);
+                        }
 
-        let write_len = _str.len();
-        let end_idx = pos.1 + write_len;
+                        // set graphics
+                        if !achar.graphics.is_empty() {
+                            result += &achar.graphics.to_string(false);
+                        }
 
-        if end_idx > self.size.width {
-            let _string = _str.split_at(write_len - (end_idx - self.size.width)).0;
-            self.plane[pos.0].place_str(_string, pos.1);
-        } else {
-            self.plane[pos.0].place_str(_str, pos.1);
-        }
-    }
+                        current_background_color = achar.back_color;
+                        current_foreground_color = achar.fore_color;
+                        current_graphics_state = achar.graphics;
+                    }
 
-    pub fn center_place_str(&mut self, str: &str, ypos: usize) {
-        let xpos: usize = (self.size.width - str.len()) / 2;
-        self.place_str(str, (ypos, xpos));
-    }
-
-    pub fn place_drawer(&mut self, other: &Self, pos: (usize, usize), opacity: f32, border: bool, title: String) {
-        if self.check_write_position(pos) {
-            return
-        }
-
-        let mut other_mod = other.clone();
-
-        for i in pos.0..self.size.height {
-            // reletive height
-            let rh: usize = i - pos.0;
-
-            if rh > (other.size.height - 1) {
-                break;
+                    result.push(achar.char);
+                }
+                result.push_str(ANSIRESET);
             }
+            if i != (self.plane.height - 1) {
+                result.push('\n');
+            }
+        }
 
-            // other.plane's reletive line
-            let otprl = &mut other_mod.plane[rh];
+        result
+    }
 
-            if opacity != 1.0 {
-                for i in 0..other_mod.size.width {
-                    match otprl.vec[i].back_color {
-                        None => {},
-                        Some(bc) => {
-                            otprl.vec[i].back_color = Some(AnsiColor {
-                            0: (bc.0 as f32 * opacity) as u8,
-                            1: (bc.1 as f32 * opacity) as u8,
-                            2: (bc.2 as f32 * opacity) as u8,
-                            });}
+    #[pyo3(signature = (text, posx, posy, fore_color=None, back_color=None))]
+    pub fn text(
+        &mut self,
+        text: &str,
+        posx: usize,
+        posy: usize,
+        fore_color: Option<AnsiColor>,
+        back_color: Option<AnsiColor>,
+    ) {
+        let mut chars = text.chars();
+        for i in 0..text.len() {
+            match chars.next() {
+                Some(c) => {
+                    if !self.plane.assert_write_position(posx + i, posy) {
+                        continue;
+                    }
+                    unsafe {
+                        let cell = self
+                            .plane.content
+                            .get_unchecked_mut(posy)
+                            .get_unchecked_mut(posx + i);
+                        cell.char = c;
+                        if fore_color.is_some() {
+                            cell.fore_color = fore_color.or(cell.fore_color);
+                        }
+                        if back_color.is_some() {
+                            cell.back_color = back_color.or(cell.back_color);
+                        }
                     }
                 }
-            }
-
-            if border {
-                if rh == 0 {
-                    let topbar_formatted = format!(
-                        "┌┤{}├{}┐",
-                        title,
-                        get_char_with_len('─', other.size.width - title.len() -4)
-                    );
-                    otprl.place_str(topbar_formatted.as_str(), 0);
-                } else if rh == (other.size.height - 1) {
-                    let bottombar_formatted = format!(
-                        "└{}┘",
-                        get_char_with_len('─', other.size.width - 2)
-                    );
-                    otprl.place_str(bottombar_formatted.as_str(), 0);
-                } else {
-                    otprl.place_str("│", 0);
-                    otprl.place_str("│", otprl.len()-1);
+                None => {
+                    break;
                 }
             }
+        }
+    }
 
-            self.plane[i].place(&otprl, pos.1, false);
-            
+    pub fn text_colored(&mut self, text: &AnsiString, posx: usize, posy: usize) {
+        for i in 0..text.len() {
+            match text.vec.get(i) {
+                Some(c) => {
+                    self.plane.assign(c, posx + i, posy);
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+    }
+
+    #[pyo3(signature = (text, posy, fore_color=None, back_color=None))]
+    pub fn text_centered(
+        &mut self,
+        text: &str,
+        posy: usize,
+        fore_color: Option<AnsiColor>,
+        back_color: Option<AnsiColor>,
+    ) {
+        let width = self.plane.width;
+        let lenght = text.len();
+        let posx = if width > lenght {
+            (width - lenght) / 2
+        } else {
+            0
+        };
+
+        self.text(text, posx, posy, fore_color, back_color)
+    }
+
+    pub fn text_colored_centered(&mut self, text: &AnsiString, posy: usize) {
+        let width = self.plane.width;
+        let lenght = text.len();
+        let posx = if width > lenght {
+            (width - lenght) / 2
+        } else {
+            0
+        };
+
+        self.text_colored(text, posx, posy)
+    }
+
+    #[pyo3(signature = (posx, posy, width, height, border_color, fill_color=None))]
+    pub fn rect(
+        &mut self,
+        posx: usize,
+        posy: usize,
+        width: usize,
+        height: usize,
+        border_color: AnsiColor,
+        fill_color: Option<AnsiColor>,
+    ) {
+        for i in 0..height {
+            for j in 0..width {
+                let is_border = j == 0 || i == 0 || j == (width - 1) || i == (height - 1);
+                self.plane.assign(
+                    &AnsiChar::new_colored(
+                        ' ',
+                        None,
+                        if is_border {
+                            Some(border_color)
+                        } else {
+                            fill_color.or(Some(border_color))
+                        },
+                    ),
+                    posx + j,
+                    posy + i,
+                );
+            }
+        }
+    }
+
+    pub fn get_plane(&self) -> Plane {
+        self.plane.clone()
+    }
+
+    pub fn place_drawer(&mut self, drawer: &DrawerFast, posx: usize, posy: usize) {
+        for i in 0..drawer.plane.height {
+            for j in 0..drawer.plane.width {
+                self.plane.assign(&drawer.plane.content[i][j], posx + j, posy + i);
+            }
+        }
+    }
+
+    pub fn place_plane(&mut self, plane: &Plane, posx: usize, posy: usize) {
+        for i in 0..plane.height {
+            for j in 0..plane.width {
+                self.plane.assign(&plane.content[i][j], posx + j, posy + i);
+            }
         }
     }
 }

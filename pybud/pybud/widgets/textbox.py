@@ -25,11 +25,11 @@ class TextBox(InteractionWidget):
         self.pointer = 0
         self.view = 0
 
-        # characters that this dialouge will listen to
+        # characters that this widget will listen to
         self.allowed_characters = allowed_chars or ""
 
         self.__ignored_keys = self._initialize_ignored_keys()
-        
+
         self.add_callback("on_keyboard_input", self._on_keyboard_input)
 
     def _initialize_ignored_keys(self):
@@ -40,7 +40,7 @@ class TextBox(InteractionWidget):
             Key.INSERT, Key.LF, Key.CR, Key.PAGE_DOWN, Key.PAGE_UP, Key.SUPR, Key.BACKSPACE
         ]
         return ctrl_keys + function_keys + command_keys
-    
+
     def reset(self):
         self.input = ""
         self.pointer = 0
@@ -51,9 +51,9 @@ class TextBox(InteractionWidget):
 
     def _on_keyboard_input(self, context: OnKeyboardInputContext):
         key = context.key
-        
+
         max_input_len = self.get_max_length()
-    
+
         # capture and place characters
         if key not in self.__ignored_keys:
             self.input = self.input[:self.pointer] + key + self.input[self.pointer:]
@@ -77,19 +77,18 @@ class TextBox(InteractionWidget):
                 self.input = self.input[:self.pointer] + self.input[self.pointer+1:]
                 # self.pointer = max(self.pointer - 1, 0)
                 context.cancel()
-    
+
             case Key.LEFT:
                 self.pointer = max(self.pointer - 1, 0)
                 if self.pointer-self.view < 0:
                     self.view = max(self.view - 1, 0)
                 context.cancel()
-            
+
             case Key.RIGHT:
                 self.pointer = min(self.pointer + 1, len(self.input))
                 if self.view == (self.pointer-max_input_len):
                     self.view = min(self.view + 1, len(self.input))
                 context.cancel()
-
 
     def format_textbox(self):
         text, inp, pointer, view = self.text, self.input, self.pointer, self.view
@@ -102,12 +101,12 @@ class TextBox(InteractionWidget):
 
         pointer_str = ansi.AnsiString(inp_[pointer-view])
         show_pointer = (self.tick % 20) >= 12
-        
+
         if self.focused and show_pointer or inp_[pointer-view] != " ":
             pointer_str.add_graphics(ansi.AnsiGraphicMode.REVERSE)
 
         # insert the pointer into input text at the correct position
-        input_plus_pointer = ansi.AnsiString( inp_[:pointer-view]) + pointer_str + ansi.AnsiString(inp_[pointer-view+1:])
+        input_plus_pointer = ansi.AnsiString(inp_[:pointer-view]) + pointer_str + ansi.AnsiString(inp_[pointer-view+1:])
 
         if isinstance(text, str):
             title = ansi.AnsiString(text, fore=(220, 220, 220))
@@ -126,17 +125,16 @@ class TextBox(InteractionWidget):
 
     def on_draw(self, context: OnDrawContext):
         drawer = context.drawer
-        x, y = self.position.get_xy()
-        # check if there is a background, if so, draw a shadow for the textbox to be indicated
-        if drawer.plane_color is not None:
-            text_shadow = tuple(map(lambda x: round(x * 0.8), list(drawer.plane_color)))
-            drawer.place(
-                astr = ansi.AnsiString(" " * (self.size.width  - len(self.text)), back=text_shadow),
-                pos = (y, x + len(self.text)),
-                assign = False
-            )
-        drawer.place(
-            astr = self.format_textbox(),
-            pos = (y, x),
-            assign = False
+        # TODO: check if there is a background, if so, draw a shadow for the textbox to be indicated
+        #if drawer.plane_color is not None:
+        #    text_shadow = tuple(map(lambda x: round(x * 0.8), list(drawer.plane_color)))
+        #    drawer.text_colored(
+        #        text=ansi.AnsiString(" " * (self.size.width - len(self.text)), back=text_shadow),
+        #        posx=len(self.text),
+        #        posy=0,
+        #    )
+        drawer.text_colored(
+            text=self.format_textbox(),
+            posx=0,
+            posy=0,
         )

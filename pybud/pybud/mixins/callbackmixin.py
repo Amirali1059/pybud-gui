@@ -1,4 +1,11 @@
+from dataclasses import dataclass
+from typing import Any
 from ..callbacks import CallbackContext
+
+@dataclass
+class CallbackResult:
+    result: Any
+    is_cancelled: bool = False
 
 class CallbackMixin:
     """
@@ -31,9 +38,9 @@ class CallbackMixin:
     def list_available_callbacks(self):
         return list(self._callbacks.keys())
 
-    def _run_callbacks(self, context: CallbackContext):
+    def _run_callbacks(self, context: CallbackContext) -> CallbackResult:
         if context.is_cancelled():
-            return False, context.get_result()
+            return CallbackResult(context.get_result(), is_cancelled=True)
 
         callback_id = context.get_callback_id()
         self.validate_callback_id(callback_id)
@@ -41,6 +48,6 @@ class CallbackMixin:
         for fn in self._callbacks[callback_id]:
             fn(context) # function modifies context in-place
             if context.is_cancelled():
-                return False, context.get_result()
+                return CallbackResult(context.get_result(), is_cancelled=True)
         
-        return True, context.get_result()
+        return CallbackResult(context.get_result())

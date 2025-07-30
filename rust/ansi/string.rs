@@ -2,10 +2,10 @@ use pyo3::prelude::*;
 
 use std::ops::Add;
 
-use crate::ansi::AnsiGraphics;
+use crate::ansi::{AnsiColor, AnsiGraphics, ANSIRESET};
 
-use super::{ColorGround, ColorMode, ANSIRESET};
 use super::char::AnsiChar;
+use super::{ColorGround, ColorMode};
 
 #[pyclass]
 #[derive(Clone, PartialEq)]
@@ -14,24 +14,10 @@ pub struct AnsiString {
     pub vec: Vec<AnsiChar>,
 }
 
-fn min(a: usize, b: usize) -> usize {
-    if a > b {b} else {a}
-}
-
 // non-python methods
 impl AnsiString {
     pub fn len(&self) -> usize {
         self.vec.len()
-    }
-
-    // non-optimized to_string, each character is rendered individually
-    pub fn to_string_noopt(&self, mode: &ColorMode) -> String {
-        let mut _string = String::new();
-        for ac in &self.vec.clone() {
-            _string.push_str(ac.to_string(mode).as_str());
-            _string.push_str(ANSIRESET);
-        }
-        _string
     }
 
     #[inline]
@@ -51,6 +37,8 @@ impl AnsiString {
 }
 
 // python methods
+// TODO: add a function to render without formatting
+// TODO: make object python subscriptable
 #[pymethods]
 impl AnsiString {
     #[new]
@@ -58,137 +46,81 @@ impl AnsiString {
     #[inline]
     pub fn new(s: &str, fore: Option<(u8, u8, u8)>, back: Option<(u8, u8, u8)>) -> Self {
         let mut vec: Vec<AnsiChar> = Vec::with_capacity(s.len());
-    
+
         for c in s.chars() {
             vec.push(AnsiChar::new(c, fore, back));
         }
 
-        Self {vec: vec}
+        Self { vec: vec }
     }
 
     // optimized to_string
-    pub fn to_string(&self, mode: &ColorMode) -> String {
+    pub fn to_string(&self, mode: Option<ColorMode>) -> String {
+        let colormode = &mode.unwrap_or(ColorMode::TRUECOLOR);
+
         if self.vec.len() == 0 {
             return String::new();
         }
-        // add the first character unoptimized
-        let mut _string = self.vec[0].to_string(mode);
+        // the minimum size of the final result is the lenght of the string
+        let mut result: String = String::with_capacity(self.len());
 
-        for i in 1..self.vec.len() {
-            // current AnsiChar
-            let cac = &self.vec[i];
-            // current fore color
-            let cfc = &cac.fore_color;
-            // current back color
-            let cbc = &cac.back_color;
-            // current AnsiGraphics
-            let cag = &cac.graphics;
+        // track cursor states
+        let mut current_background_color: Option<AnsiColor> = None;
+        let mut current_foreground_color: Option<AnsiColor> = None;
+        let mut current_graphics_state: AnsiGraphics = AnsiGraphics::empty();
 
-            // previus AnsiChar
-            let pac = &self.vec[i-1];
-            // previus fore color
-            let pfc = &pac.fore_color;
-            // previus back color
-            let pbc = &pac.back_color;
-            // previus AnsiGraphics
-            let pag = &pac.graphics;
+        for achar in &self.vec {
+            let need_update = current_background_color != achar.back_color
+                || current_foreground_color != achar.fore_color
+                || current_graphics_state != achar.graphics;
 
-            // if color is changed, apply changes
-            if (pbc != cbc) || (pfc != cfc) {
-                // reset ansi
-                _string.push_str(ANSIRESET);
-                /* to reset background and foreground sperately:
-                _string.push_str(RESET_BACKGROUND);
-                _string.push_str(RESET_FOREGROUND);*/
+            if need_update {
+                if current_background_color.is_some() || current_foreground_color.is_some() || !current_graphics_state.is_empty() {
+                    result += &ANSIRESET;
+                }
+                // set background color
+                if let Some(c) = achar.back_color {
+                    result += &c.to_string(colormode, &ColorGround::BACK);
+                }
 
-                // set background if exists
-                _string.push_str(match cbc {
-                    None => {String::new()},
-                    Some(c ) => {c.to_string(mode, &ColorGround::BACK)},
-                }.as_str());
+                // set foreground color
+                if let Some(c) = achar.fore_color {
+                    result += &c.to_string(colormode, &ColorGround::FORE);
+                }
 
-                // set foreground if exists
-                _string.push_str(match cfc {
-                    None => {String::new()},
-                    Some(c) => {c.to_string(mode, &ColorGround::FORE)},
-                }.as_str());
+                // set graphics
+                if !achar.graphics.is_empty() {
+                    result += &achar.graphics.to_string(false);
+                }
 
-                // write current AnsiGraphics AGAIN
-                _string.push_str(cag.to_string(false).as_str());
-            } else if pag != cag {
-                // reset previus AnsiGraphics
-                _string.push_str(pag.to_string(true).as_str());
-                // write current AnsiGraphics
-                _string.push_str(cag.to_string(false).as_str());
-
+                current_background_color = achar.back_color;
+                current_foreground_color = achar.fore_color;
+                current_graphics_state = achar.graphics;
             }
-            
-            _string.push(cac.char);
+
+            result.push(achar.char);
         }
         // append reset token and return
-        _string + "\x1b[0m"
+        result + "\x1b[0m"
     }
 
-    pub fn split_at(&self, mid: usize) -> (AnsiString, AnsiString){
+    pub fn split_at(&self, mid: usize) -> (AnsiString, AnsiString) {
         let vecs = self.vec.split_at(mid);
         (
-            Self {vec: vecs.0.to_vec()},
-            Self {vec: vecs.1.to_vec()}
+            Self {
+                vec: vecs.0.to_vec(),
+            },
+            Self {
+                vec: vecs.1.to_vec(),
+            },
         )
     }
 
-    pub fn cut_at(&self, end: usize) -> AnsiString{
+    pub fn cut_at(&self, end: usize) -> AnsiString {
         let vecs = self.vec.split_at(end);
-        Self {vec: vecs.0.to_vec()}
-    }
-
-    // main function for writing text
-    pub fn place(&mut self, text: &AnsiString, pos: usize, assign: bool) {
-        assert!(pos < self.len());
-        // starting index
-        let si = pos;
-        // endiing index
-        let ei = min(pos + text.len(), self.vec.len());
-
-        for i in si..ei {
-            let ac = &text.vec[i - si];
-            if assign {
-                self.vec[i] = ac.clone();
-            } else {
-                self.vec[i] = AnsiChar {
-                    char: ac.char,
-                    fore_color: ac.fore_color,
-                    back_color: if ac.back_color == None {self.vec[i].back_color} else {ac.back_color},
-                    graphics: ac.graphics.clone(),
-                }
-            }
+        Self {
+            vec: vecs.0.to_vec(),
         }
-    }
-
-    pub fn place_str(&mut self, str: &str, pos: usize) {
-        // TODO: negative positon values
-        assert!(pos < self.len());
-
-        let astr = AnsiString::new_colorless(str);
-        self.place(&astr, pos, false);
-        
-    }
-
-    pub fn center_place(&mut self, astr: &AnsiString, assign: bool) {
-        assert!(self.len() > astr.len());
-
-        let pos: usize = (self.len() - astr.len()) / 2;
-
-        self.place(astr, pos, assign);
-    }
-
-    pub fn center_place_str(&mut self, str: &str) {
-        assert!(self.len() > str.len());
-
-        let pos: usize = (self.len() - str.len()) / 2;
-
-        let astr = AnsiString::new_colorless(str);
-        self.place(&astr, pos, false);
     }
 
     pub fn add_graphics(&mut self, agm: AnsiGraphics) {
@@ -199,10 +131,11 @@ impl AnsiString {
 
     // python operation add
     pub fn __add__(&mut self, other: &Self) -> Self {
-        let mut r = self.clone();
-        r.vec.append(&mut other.vec.clone());
+        let mut new_vec: Vec<AnsiChar> = Vec::with_capacity(self.vec.len() + other.vec.len());
+        new_vec.append(&mut self.vec.clone());
+        new_vec.append(&mut other.vec.clone());
 
-        r
+        AnsiString { vec: new_vec }
     }
 
     // python len function
@@ -212,7 +145,7 @@ impl AnsiString {
 
     // python __str__ magic function
     pub fn __str__(&self) -> String {
-        self.to_string(&ColorMode::TRUECOLOR)
+        self.to_string(None)
     }
 
     // python __eq__ magic function

@@ -12,7 +12,7 @@ from ..callbacks.widgets.combobox import OnSelectionChanged
 class ComboBox(InteractionWidget):
     def __init__(
         self,
-        text: str,
+        text: str | ansi.AnsiString,
         options: dict[str, FunctionType],
         default_option: int = 0,
         size: Size | tuple[int, int] = (100, 10),
@@ -20,6 +20,8 @@ class ComboBox(InteractionWidget):
         **kwargs
     ):
         super().__init__(size, position, **kwargs)
+        if isinstance(text, str):
+            text = ansi.AnsiString(text, fore=(220, 220, 220))
         self.text = text
         self.options = options.keys()
         self.n_options = len(self.options)
@@ -52,21 +54,19 @@ class ComboBox(InteractionWidget):
     def on_draw(self, context: OnDrawContext):
         drawer = context.drawer
         
-        x, y = self.position.get_xy()
-        drawer.place(
-            astr = ansi.AnsiString(self.text, fore=(220, 220, 220)),
-            pos = (y, x),
-            assign = False
-        )
+        drawer.text_colored(text = self.text, posx = 0, posy = 0)
+        
+        # this is intended to be a for loob because sometimes self.selected_option_id doesn't
+        # match any index of the options list and therefore no option is selected
         for i, option in enumerate(self.options):
             if i == self.selected_option_id:
                 _option = ansi.AnsiString(
                     f" {option} ".ljust(self.size.width - len(self.text)),
-                    back = tuple(map(lambda x: round(x * 0.8), drawer.plane_color)) if drawer.plane_color else None
+                    #back = tuple(map(lambda x: round(x * 0.8), drawer.plane_color)) if drawer.plane_color else None
                 )
                 _option.add_graphics(ansi.AnsiGraphicMode.UNDERLINE)
-                drawer.place(
-                    astr = _option,
-                    pos = (y, x + len(self.text)),
-                    assign = False
+                drawer.text_colored(
+                    text = _option,
+                    posx = len(self.text),
+                    posy = 0
                 )

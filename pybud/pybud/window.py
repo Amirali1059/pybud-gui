@@ -1,34 +1,35 @@
 from readchar import key as KeyPress
 
-from .drawer import Drawer
-from .datatypes import Size, Position
-
-from .mixins import CallbackMixin, DepthMixin
-
-from .enums import WindowClosingReason
-from .callbacks import OnUpdateContext, OnDrawContext, OnMoveContext, OnResizeContext, OnFocusAddedContext, OnFocusLostContext
+from .callbacks import OnKeyboardInputContext, OnUpdateContext, OnDrawContext, OnMoveContext, OnResizeContext, OnFocusAddedContext, OnFocusLostContext
 from .callbacks.window import OnOpenContext, OnCloseContext
-
+from .drawer import DrawerFast, Plane
+from .datatypes import Size, Position
+from .datatypes.color import Color
+from .enums import WindowClosingReason
+from .mixins import CallbackMixin, DepthMixin
+from .mixins.callbackmixin import CallbackResult
 from .widgets import Widget, InteractionWidget
 
+
 def exists(v):
+    CallbackResult
     return v is not None
+
 
 class Window(CallbackMixin, DepthMixin):
     """
     A `Window` is the main display plane in witch all the widgets will be drawn to, 
     it has a size and position and must be passed to a `Session` to be handled properly.
     """
-    
+
     def __init__(
         self,
         size: Size | tuple[int, int],
         position: Position | tuple[int, int],
-        title: str = None,
+        title: str | None = None,
         has_border: bool = True,
-        opacity: float = 1.0
+        background: Color | tuple[int, int, int] | None = None,
     ):
-        
         if not isinstance(size, (Size, tuple)):
             raise TypeError(
                 f"Expected size to be of type `datatypes.Size` or `tuple[int, int]` but got {type(size)}."
@@ -37,7 +38,7 @@ class Window(CallbackMixin, DepthMixin):
             size = Size(*size)
 
         self.size = size
-        
+
         if not isinstance(position, (Position, tuple)):
             raise TypeError(
                 f"Expected position to be of type `datatypes.Poition` or `tuple[int, int]` but got {type(position)}."
@@ -47,23 +48,28 @@ class Window(CallbackMixin, DepthMixin):
 
         self.position = position
         
+        if background:
+            if not isinstance(background, (Color, tuple)):
+                raise TypeError(
+                    f"Expected background to be of type `datatypes.Color` or `tuple[int, int, int]` but got {type(background)}."
+                )
+            if isinstance(background, tuple):
+                background = Color(*background)
+        
+            self.background = background
+        else:
+            self.background = None
+
         self.title = title or self.__class__.__name__
         self.has_border = has_border
-        self.opacity = opacity
-        
+
         self.is_open = False
         self.is_in_focus = False
-        
+
         self._widgets: list[Widget] = []
         self._focus_widget: Widget = None
 
         self.tick = 0
-        
-        self.window_drawer = Drawer(
-            width = self.size.width,
-            height = self.size.height,
-            plane_color = None
-        )
 
         # holds all callbacks based on their ids
         super().__init__([
@@ -74,7 +80,8 @@ class Window(CallbackMixin, DepthMixin):
             "on_focus_lost",
             "on_resize",
             "on_move",
-            "on_update"
+            "on_update",
+            "on_keyboard_input"
         ])
 
         self.add_callback("on_resize", self.on_resize)
@@ -87,27 +94,57 @@ class Window(CallbackMixin, DepthMixin):
         self.is_in_focus = True
         self._run_callbacks(OnFocusAddedContext())
 
-    def _trace_closest_widget_in_angle_range(self, origin: InteractionWidget, angle: float, pov: float = 75.0) -> Widget | None:
-        # Get origin point and normalize input angles
+    def _trace_closest_widget(self, origin: InteractionWidget, mode: int, delta: float = 1.0) -> Widget | None:
+        corner_points = origin._get_bouding_box()
         o_point = origin._get_center_point()
-        angle_min = (angle - pov) % 360
-        angle_max = (angle + pov) % 360
+
+        match mode:
+            case 0:  # UP
+                # corners to be used for the calculations
+                c0 = corner_points[0]
+                c1 = corner_points[1]
+                # the weights of x and y axis diffrence
+                x_w = 1.0
+                y_w = -delta
+            case 1:  # RIGHT
+                c0 = corner_points[1]
+                c1 = corner_points[2]
+                x_w = -delta
+                y_w = 1.0
+            case 2:  # DOWN
+                c0 = corner_points[2]
+                c1 = corner_points[3]
+                x_w = 1.0
+                y_w = -delta
+            case 3:  # LEFT
+                c0 = corner_points[3]
+                c1 = corner_points[0]
+                x_w = -delta
+                y_w = 1.0
+            case _:
+                raise ValueError(f"Invalid mode: {mode}")
 
         applicable_widgets = []
         for w in reversed(self._widgets):
             if w is origin or not isinstance(w, InteractionWidget):
                 continue
-                
-            w_point = w._get_center_point()
-            widget_angle = o_point.angle_to(w_point)
-            
-            # Check if angle falls within the range (handles wrap-around)
-            if angle_min <= angle_max:
-                in_range = angle_min <= widget_angle <= angle_max
-            else:
-                in_range = widget_angle >= angle_min or widget_angle <= angle_max
 
-            if in_range:
+            w_point = w._get_center_point()
+
+            d_x0 = abs(w_point.x - c0.x)
+            d_x1 = abs(w_point.x - c1.x)
+            d_x = (d_x0 + d_x1) * x_w * 0.5
+
+            d_y0 = w_point.y - c0.y
+            d_y1 = w_point.y - c1.y
+            d_y = (d_y0 + d_y1) * y_w
+
+            delta_score = d_x + d_y
+
+            delta_threshhold = abs(c0.x - c1.x) + abs(c0.y - c1.y)
+
+            # Check if the widget is in the direction of the mode
+            if delta_score <= delta_threshhold:
                 applicable_widgets.append((w, w_point))
 
         # find the widget were its center point is the closest to the origin point
@@ -119,25 +156,22 @@ class Window(CallbackMixin, DepthMixin):
                 min_distance = w_distance
                 chosen_widget = w
         return chosen_widget
-    
+
     def resize(self, size: Size = None):
         if size is None:
             return
         self.size = size
-        self.window_drawer = Drawer(
-            width = self.size.width,
-            height = self.size.height,
-            plane_color = None
-        )
         self._run_callbacks(OnResizeContext(self.size))
-    
+
     def on_resize(self):
         pass
-    
+
     def update(self, context: OnUpdateContext):
         if exists(context.tick):
             self.tick = context.tick
         self._run_callbacks(context)
+        if context.key is not None:
+            self._run_callbacks(OnKeyboardInputContext(context.key))
         if exists(self._focus_widget):
             self._focus_widget.update(context)
         if context.is_cancelled():
@@ -158,36 +192,36 @@ class Window(CallbackMixin, DepthMixin):
                     context.cancel()
             case KeyPress.UP:
                 if self._focus_widget is not None:
-                    chosen_widget = self._trace_closest_widget_in_angle_range(
-                        origin = self._focus_widget,
-                        angle = 90,
+                    chosen_widget = self._trace_closest_widget(
+                        origin=self._focus_widget,
+                        mode=0,
                     )
                     if chosen_widget:
                         self.set_focus_widget(chosen_widget)
                         context.cancel()
             case KeyPress.DOWN:
                 if self._focus_widget is not None:
-                    chosen_widget = self._trace_closest_widget_in_angle_range(
-                        origin = self._focus_widget,
-                        angle = 270,
+                    chosen_widget = self._trace_closest_widget(
+                        origin=self._focus_widget,
+                        mode=2,
                     )
                     if chosen_widget:
                         self.set_focus_widget(chosen_widget)
                         context.cancel()
             case KeyPress.RIGHT:
                 if self._focus_widget is not None:
-                    chosen_widget = self._trace_closest_widget_in_angle_range(
-                        origin = self._focus_widget,
-                        angle = 0,
+                    chosen_widget = self._trace_closest_widget(
+                        origin=self._focus_widget,
+                        mode=1,
                     )
                     if chosen_widget:
                         self.set_focus_widget(chosen_widget)
                         context.cancel()
             case KeyPress.LEFT:
                 if self._focus_widget is not None:
-                    chosen_widget = self._trace_closest_widget_in_angle_range(
-                        origin = self._focus_widget,
-                        angle = 180,
+                    chosen_widget = self._trace_closest_widget(
+                        origin=self._focus_widget,
+                        mode=3,
                     )
                     if chosen_widget:
                         self.set_focus_widget(chosen_widget)
@@ -202,7 +236,7 @@ class Window(CallbackMixin, DepthMixin):
         widget._set_depth(max([0]+[w._get_depth() for w in self._widgets])+1)
         self._widgets.append(widget)
         self._update_widget_focus()
-    
+
     def bring_widget_to_front(self, widget: Widget):
         # TODO: Don't update unnecessary widgets
         for w in self._widgets:
@@ -210,7 +244,7 @@ class Window(CallbackMixin, DepthMixin):
                 w._set_depth(0)
             else:
                 w._set_depth(1+w._get_depth())
-    
+
     # sets the last widget in `self._widgets` to be in focus and others to not be in focus
     def _update_widget_focus(self):
         focus_granted = False
@@ -224,42 +258,36 @@ class Window(CallbackMixin, DepthMixin):
                     w.unfocus()
         if not focus_granted:
             self._focus_widget = None
-    
-    def draw(self, drawer: Drawer):
+
+    def draw(self) -> Plane:
         if not self.is_open:
             return
-        
-        self.window_drawer.plane_color = drawer.plane_color
-        self.window_drawer.clear()
 
-        depth_order_widgets = sorted(self._widgets, key=lambda x: x._get_depth())
-        for w in depth_order_widgets:
-            # TODO: implement focus indication in Widgets themseleves rather than in Window
-            if w is self._focus_widget:
-                self.window_drawer.place_drawer(
-                    Drawer(w.size.get_width(), w.size.get_height(), plane_color=self.window_drawer.plane_color),
-                    pos = w.position.get_yx(),
-                    opacity = 0.9,
-                    border = False,
-                    title = ""
-                )
-            w.draw(self.window_drawer)
-        
-        self._run_callbacks(OnDrawContext(drawer))
-
-        drawer.place_drawer(
-            self.window_drawer,
-            pos = self.position.get_yx(),
-            opacity = 0.9,
-            border = self.has_border,
-            title = self.title
+        # create a new instance of drawer for this window
+        drawer = DrawerFast(
+            width=self.size.width,
+            height=self.size.height,
+            plane_color=self.background,
         )
-                
+        
+        drawer.text(f"[ {self.title} ]", posx=1, posy=0)
+
+        # draw widgets in order of depth acending
+        for w in sorted(self._widgets, key=lambda x: x._get_depth()):
+            drawer.place_plane(
+                plane=w.draw(),
+                posx=w.position.x,
+                posy=w.position.y
+            )
+        # run window's draw callbacks
+        self._run_callbacks(OnDrawContext(drawer))
+        
+        return drawer.get_plane()
 
     def open(self):
         self.is_open = True
-        return self._run_callbacks(OnOpenContext())
-    
+        self._run_callbacks(OnOpenContext())
+
     def close(self, reason: int):
         self.is_open = False
-        return self._run_callbacks(OnCloseContext(reason))
+        self._run_callbacks(OnCloseContext(reason))

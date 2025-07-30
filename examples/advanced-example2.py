@@ -5,8 +5,6 @@ class Main(pb.Window):
         super().__init__(
             size = (76, 14),
             position = (0, 0),
-            has_border = False,
-            opacity = 1.0,
             title = "PyBUD: GUI Beauty"
         )
         
@@ -90,15 +88,16 @@ class Main(pb.Window):
 
 
 if __name__ == "__main__":
+    import asyncio
+    
     # only for windows users
     pb.ansi.init()
-
     
     # define `Session` size and `Session` background, you can think of 
     # a session as the screen display that shows the `Window`s on it.
     s = pb.Session((76, 14), background=(90, 110, 220))
     s.add_window(Main())
-    s.show()
+    asyncio.run(s.show())
 
     print(f"Session Closed!")
     for i, w in enumerate(s.window_buffer[0]._widgets):

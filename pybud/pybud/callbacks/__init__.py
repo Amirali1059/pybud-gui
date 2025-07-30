@@ -1,4 +1,4 @@
-from ..drawer import Drawer
+from ..drawer import DrawerFast
 
 from ..datatypes import Size, Position
 
@@ -59,7 +59,7 @@ class OnDrawContext(CallbackContext):
     A child of `CallbackContext` for screens/widgets callback with id="on_draw".
     """
 
-    def __init__(self, drawer: Drawer):
+    def __init__(self, drawer: DrawerFast):
         super().__init__(id = "on_draw")
         self.drawer = drawer
 

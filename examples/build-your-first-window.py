@@ -13,6 +13,8 @@ class Main(Window):
         )
 
 if __name__ == "__main__":
+    import asyncio
+    
     # only for windows users
     import pybud.drawer.ansi as ansi
     ansi.init()
@@ -21,5 +23,5 @@ if __name__ == "__main__":
     # a session as the screen display that shows the `Window`s on it.
     s = Session((100, 10), background=(100, 100, 250))
     s.add_window(Main())
-    s.show()
+    asyncio.run(s.show())
     print("Closed!")

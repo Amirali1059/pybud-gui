@@ -1,12 +1,11 @@
 import pybud as pb
+import pybud.widgets as pbw
 
 class Main(pb.Window):
     def __init__(self):
         super().__init__(
             size = (76, 14),
             position = (0, 0),
-            has_border = False,
-            opacity = 1.0,
             title = "PyBUD: GUI Beauty"
         )
         
@@ -20,7 +19,7 @@ class Main(pb.Window):
         )
         self.add_widget(self.lbl_title)
         
-        self.lbl_caption = pb.widgets.Label(
+        self.lbl_caption = pbw.Label(
             "A python library for creating beautiful GUIs in console, with tons of diffrent components, such as Dialogs, Widgets, Drawables, ansi color optimizations written in Rust, and more!",
             centered = True,
             size = (self.size.width - 4, 1),  # height will be owerwritten in WidgetLabel
@@ -28,14 +27,14 @@ class Main(pb.Window):
         )
         self.add_widget(self.lbl_caption)
         
-        self.tbox_input = pb.widgets.TextBox(
+        self.tbox_input = pbw.TextBox(
             "TextBox: ",
             size = (self.size.width//2 - 4, 1),  # height will be owerwritten in WidgetLabel
             position = (2, 6),
         )
         self.add_widget(self.tbox_input)
 
-        self.cbox_input = pb.widgets.ComboBox(
+        self.cbox_input = pbw.ComboBox(
             "ComboBox: ",
             options = {
                 "Nice!": self.nice_option,
@@ -48,7 +47,7 @@ class Main(pb.Window):
         )
         self.add_widget(self.cbox_input)
 
-        self.vmc_input = pb.widgets.VerticalMultipleChoice(
+        self.vmc_input = pbw.VerticalMultipleChoice(
             "VerticalMultipleChoice:",
             # the text and callback function for each option
             options = {
@@ -62,7 +61,7 @@ class Main(pb.Window):
         )
         self.add_widget(self.vmc_input)
 
-        self.lbl_tip = pb.widgets.Label(
+        self.lbl_tip = pbw.Label(
             pb.ansi.AnsiString("Tip: ", fore = (255, 128, 0)) +
             pb.ansi.AnsiString("Use TAB or arrow keys to switch between Widgets, Use ") +
             pb.ansi.AnsiString("Ctrl + C", fore = (255, 128, 0)) + pb.ansi.AnsiString(" to exit the demo."),
@@ -73,7 +72,7 @@ class Main(pb.Window):
         )
         self.add_widget(self.lbl_tip)
         
-        self.lbl_result = pb.widgets.Label(
+        self.lbl_result = pbw.Label(
             "",
             centered = True,
             size = (self.size.width - 4, 1),  # height will be owerwritten in WidgetLabel
@@ -113,6 +112,8 @@ class Main(pb.Window):
 
 
 if __name__ == "__main__":
+    import asyncio
+    
     # only for windows users
     pb.ansi.init()
     
@@ -123,17 +124,17 @@ if __name__ == "__main__":
     # a session as the screen display that shows the `Window`s on it.
     s = pb.Session((76, 14), background=(90, 110, 220), allow_resize=True)
     s.add_window(Main())
-    s.show()
+    asyncio.run(s.show())
 
     print(f"Session Closed!")
     for i, w in enumerate(s.window_buffer[0]._widgets):
         print(w.name + ":")
-        if isinstance(w, pb.widgets.TextBox):
+        if isinstance(w, pbw.TextBox):
             print(f"- text=\"{w.text}\", input=\"{w.input}\"")
-        elif isinstance(w, (pb.widgets.VerticalMultipleChoice, pb.widgets.ComboBox)):
+        elif isinstance(w, (pbw.VerticalMultipleChoice, pbw.ComboBox)):
             print(f"- selected_option_id={w.selected_option_id}")
             print(f"- selected option text=\"{list(w.options)[w.selected_option_id]}\"")
-        if isinstance(w, pb.widgets.Label):
+        if isinstance(w, pbw.Label):
             print(f"- text=\"{w.text}\"")
         else:
             print("- no data")

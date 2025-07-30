@@ -52,14 +52,13 @@ class VerticalMultipleChoice(InteractionWidget):
     def on_draw(self, context: OnDrawContext):
         drawer = context.drawer
         
-        x, y = self.position.get_xy()
         text = self.text
         if isinstance(self.text, str):
             text = ansi.AnsiString(self.text, fore=(220, 220, 220))
-        drawer.place(
-            astr = text,
-            pos = (y, x),
-            assign = False
+        drawer.text_colored(
+            text = text,
+            posx = 0,
+            posy = 0
         )
         for i, option in enumerate(self.options):
             if i == self.selected_option_id:
@@ -69,8 +68,8 @@ class VerticalMultipleChoice(InteractionWidget):
                 option_color = (220, 220, 220)
                 option_indicator = ansi.AnsiString("  ", fore=(220, 220, 220))
     
-            drawer.place(
-                astr = option_indicator + ansi.AnsiString(option, fore=option_color),
-                pos = (y + i + 1, x),
-                assign = False
+            drawer.text_colored(
+                text = option_indicator + ansi.AnsiString(option, fore=option_color),
+                posx = 0,
+                posy = i + 1,
             )

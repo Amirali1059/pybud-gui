@@ -1,24 +1,26 @@
-use pyo3::prelude::*;
 use bitflags::bitflags;
+use pyo3::prelude::*;
 
 pub mod char;
-pub mod string;
 pub mod drawer;
+pub mod string;
 
 // Types
 #[pyclass]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AnsiColor(pub u8, pub u8, pub u8);
 
 fn calc_legacy_color(c: u8) -> u8 {
-    /* 
-    legacy colors have an estimated range from about 48 to 236, 
+    /*
+    legacy colors have an estimated range from about 48 to 236,
     this function translates a single color to a legacy color of base 6
     */
 
-    // const K: f32 = 5.0 / 187.0; // constant ratio
-    
-    if c >= 48 { ((c - 48) * 5) / 187 } else { 0 }
+    if c >= 48 {
+        ((c - 48) * 5) / 187
+    } else {
+        0
+    }
 }
 
 impl AnsiColor {
@@ -29,13 +31,18 @@ impl AnsiColor {
             ColorGround::FORE => "38",
         }
     }
-
+    
     fn truecolor_render(&self, ground: &ColorGround) -> String {
-        format!("\x1b[{};2;{};{};{}m", Self::get_ground_code(ground), self.0, self.1, self.2)
+        format!(
+            "\x1b[{};2;{};{};{}m",
+            Self::get_ground_code(ground),
+            self.0,
+            self.1,
+            self.2
+        )
     }
 
     fn limited_render(&self, ground: &ColorGround) -> String {
-        
         let r = calc_legacy_color(self.0);
         let g = calc_legacy_color(self.1);
         let b = calc_legacy_color(self.2);
@@ -49,13 +56,13 @@ impl AnsiColor {
 impl AnsiColor {
     #[new]
     fn new(r: u8, g: u8, b: u8) -> Self {
-        Self {0: r, 1: g, 2:b}
+        Self { 0: r, 1: g, 2: b }
     }
 
     pub fn to_string(&self, mode: &ColorMode, ground: &ColorGround) -> String {
         match mode {
             ColorMode::TRUECOLOR => self.truecolor_render(ground),
-            ColorMode::LIMITED => self.limited_render(ground)
+            ColorMode::LIMITED => self.limited_render(ground),
         }
     }
 
@@ -69,22 +76,22 @@ impl AnsiColor {
 #[derive(Clone, Copy, PartialEq)]
 pub enum ColorGround {
     BACK,
-    FORE
+    FORE,
 }
 #[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum ColorMode {
     LIMITED,
-    TRUECOLOR
+    TRUECOLOR,
 }
 
 const ANSIRESET: &str = "\x1b[0m";
-//const RESET_FOREGROUND: &str = "\x1b[0;39m";
-//const RESET_BACKGROUND: &str = "\x1b[0;49m";
+// const RESET_FOREGROUND: &str = "\x1b[0;39m";
+// const RESET_BACKGROUND: &str = "\x1b[0;49m";
 
 bitflags! {
     #[pyclass]
-    #[derive(Clone, Copy, PartialEq)]
+    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
     pub struct AnsiGraphics: u8 {
         const BOLD      = 0b00000001;
         const FAINT     = 0b00000010;
@@ -99,7 +106,7 @@ bitflags! {
 
 impl AnsiGraphics {
     const IDX2ANSI: [(&'static str, &'static str); 8] = [
-        // set    ,    reset  
+        // set    ,    reset
         ("\x1b[1m", "\x1b[22m"), // 0 -> BOLD
         ("\x1b[2m", "\x1b[22m"), // 1 -> FAINT
         ("\x1b[3m", "\x1b[23m"), // 2 -> ITALIC
@@ -108,36 +115,36 @@ impl AnsiGraphics {
         ("\x1b[7m", "\x1b[27m"), // 5 -> REVERSE
         ("\x1b[8m", "\x1b[28m"), // 6 -> HIDDEN
         ("\x1b[9m", "\x1b[29m"), // 7 -> STRIKE
-        ];
-    
+    ];
+
     const NAME2IDX: [(&'static str, u8); 8] = [
-        // set    ,    reset  
-        ("BOLD", 0), 
-        ("FAINT", 1), 
-        ("ITALIC", 2), 
-        ("UNDERLINE", 3), 
+        // set    ,    reset
+        ("BOLD", 0),
+        ("FAINT", 1),
+        ("ITALIC", 2),
+        ("UNDERLINE", 3),
         ("BLINKING", 4),
         ("REVERSE", 5),
         ("HIDDEN", 6),
         ("STRIKE", 7),
-        ];
+    ];
 
     #[inline]
     pub fn get_mode(name: &str, reset: bool) -> &'static str {
         let mut i: usize = 0;
         let idx = loop {
-            if i < Self::NAME2IDX.len(){
+            if i < Self::NAME2IDX.len() {
                 let mapping = Self::NAME2IDX[i];
                 if mapping.0 == name.to_uppercase() {
-                    break mapping.1 as i8
+                    break mapping.1 as i8;
                 }
                 i += 1;
             } else {
-                break -1
+                break -1;
             }
         };
 
-        if idx == -1{
+        if idx == -1 {
             print!("Could not find mode with name \"{}\".", name);
             panic!()
         }
@@ -145,13 +152,13 @@ impl AnsiGraphics {
         let idx: usize = idx as usize;
 
         let graphic_ansi_codes = match Self::IDX2ANSI.get(idx) {
-            None => {("", "")},
-            Some(t) => {*t}
+            None => ("", ""),
+            Some(t) => *t,
         };
 
         match reset {
-            false => {graphic_ansi_codes.0},
-            true => {graphic_ansi_codes.1}
+            false => graphic_ansi_codes.0,
+            true => graphic_ansi_codes.1,
         }
     }
 }

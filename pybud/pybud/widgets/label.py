@@ -1,6 +1,6 @@
 from .widget import Widget
 
-from ..drawer import Drawer, ansi
+from ..drawer import DrawerFast, ansi
 from ..datatypes import Size, Position
 from ..callbacks import OnDrawContext
 
@@ -40,13 +40,18 @@ class Label(Widget):
         
         self._text = value
     
-    def _place_text(self, drawer: Drawer, text: ansi.AnsiString, line_index: int = 0):
-        def maybe_center_place(t: str, ypos):
+    def _place_text(self, drawer: DrawerFast, text: ansi.AnsiString, line_index: int = 0):
+        def maybe_center_place(t: str | ansi.AnsiString, ypos):
             if self.centered:
-                pos = (self.position.y + ypos, self.position.x + max(0, self.pad + self.size.width - len(text)) // 2)
+                pos = (ypos, max(0, self.pad + self.size.width - len(text)) // 2)
             else:
-                pos = (self.position.y + ypos, self.position.x + self.pad)
-            drawer.place(t, pos = pos, assign = False)
+                pos = (ypos, self.pad)
+            if isinstance(t, ansi.AnsiString):
+                drawer.text_colored(t, posx = pos[1], posy=pos[0])
+            elif isinstance(t, str):
+                drawer.text(t, posx = pos[1], posy=pos[0])
+            else:
+                raise TypeError(f"expexted string or `AnsiString` but got {type(t)}")
 
         max_length = (self.size.width - 2*self.pad)
 

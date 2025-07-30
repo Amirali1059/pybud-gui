@@ -52,6 +52,8 @@ class Main(Window):
         self.lbl_result.text = ansi.AnsiString("Nice!", fore=(0, 0, 255))
 
 if __name__ == "__main__":
+    import asyncio
+    
     # only for windows users
     import pybud.drawer.ansi as ansi
     ansi.init()
@@ -60,5 +62,5 @@ if __name__ == "__main__":
     # a session as the screen display that shows the `Window`s on it.
     s = Session((76, 11), background=(90, 110, 220))
     s.add_window(Main())
-    s.show()
+    asyncio.run(s.show())
     print("Closed!")

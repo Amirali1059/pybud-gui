@@ -1,4 +1,4 @@
-from ..drawer import Drawer
+from ..drawer import DrawerFast, Plane
 
 from ..mixins import CallbackMixin, DepthMixin
 
@@ -54,8 +54,13 @@ class Widget(CallbackMixin, DepthMixin):
     def is_in_focus(self):
         return False
 
-    def draw(self, drawer: Drawer):
+    def draw(self) -> Plane:
+        drawer = DrawerFast(
+            self.size.width,
+            height=self.size.height,
+        )
         self._run_callbacks(OnDrawContext(drawer))
+        return drawer.get_plane()
 
     def on_draw(self, context = OnDrawContext):
         pass
@@ -115,3 +120,13 @@ class InteractionWidget(Widget):
             self.position.x + (self.size.width / 2),
             self.position.y + (self.size.height / 2)
         )
+    
+    # calculates the corners points of this widget, used internally
+    # for arrow key interactions
+    def _get_bouding_box(self) -> list[Point]:
+        return [
+            Point(self.position.x, self.position.y),
+            Point(self.position.x + self.size.width, self.position.y),
+            Point(self.position.x + self.size.width, self.position.y + self.size.height),
+            Point(self.position.x, self.position.y + self.size.height),
+        ]

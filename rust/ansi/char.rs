@@ -18,6 +18,18 @@ pub struct AnsiChar {
     pub graphics: AnsiGraphics,
 }
 
+impl AnsiChar {
+    #[inline]
+    pub fn new_colored(c: char, fore: Option<AnsiColor>, back: Option<AnsiColor>) -> AnsiChar {
+        Self {
+            char: c,
+            back_color: back,
+            fore_color: fore,
+            graphics: AnsiGraphics::empty(),
+        }
+    }
+}
+
 #[pymethods]
 impl AnsiChar {
     #[new]
@@ -34,7 +46,7 @@ impl AnsiChar {
                 Some(fore) => {Some(AnsiColor(fore.0, fore.1, fore.2))},
                 None => {None}
             },
-            graphics: AnsiGraphics::new(),
+            graphics: AnsiGraphics::empty(),
         }
     }
 

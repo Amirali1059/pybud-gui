@@ -22,7 +22,7 @@ class Main(Window):
         ))
 
     def option1(self):
-        print("Option 1 selected")
+       print("Option 1 selected")
 
     def option2(self):
         print("Option 2 selected")
@@ -31,9 +31,11 @@ class Main(Window):
         print("Option 3 selected")
 
 if __name__ == "__main__":
+    import asyncio
+    
     import pybud.drawer.ansi as ansi
     ansi.init()
 
     s = Session((50, 9), background=(100, 100, 250))
     s.add_window(Main())
-    s.show()
+    asyncio.run(s.show())
